@@ -9,7 +9,7 @@ module.exports =
         console.log("========== Initialisation de l'utilisateur par defaut ==========");
         const username = process.env.INIT_USERNAME || "admin";
         const userExist = User.findOne({
-            where: { username: username }
+            username: username
         });
 
         if (await userExist == null) {

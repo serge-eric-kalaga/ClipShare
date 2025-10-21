@@ -1,4 +1,4 @@
-const { User, CreateUserModel, UpdateUserModel } = require("../models/Models")
+const { User, CreateUserModel, UpdateUserModel, LoginModel } = require("../models/Models")
 const jsonwebtoken = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 
@@ -27,7 +27,7 @@ module.exports = {
                     username: req.body.username
                 }).exec();
                 if (existingUser) {
-                    return res.status(400).Response({ message: "Username already exists !" });
+                    return res.status(400).Response({ message: "Ce nom d'utilisateur existe déjà !" });
                 }
 
                 const newUser = new User({
@@ -35,12 +35,8 @@ module.exports = {
                     username: req.body.username,
                     password: bcrypt.hashSync(req.body.password, parseInt(process.env.UserPasswordSaltRound))
                 });
-                await newUser.save((err, user) => {
-                    if (err) {
-                        return next(err);
-                    }
-                    res.Response({ data: user });
-                });
+                await newUser.save();
+                res.Response({ data: newUser });
             }).catch(err => {
                 next(err);
             })
@@ -55,7 +51,7 @@ module.exports = {
                 username: req.params.username
             });
             if (!user) {
-                res.status(404).Response({ message: "User not found !" })
+                res.status(404).Response({ message: "Utilisateur non trouvé !" })
             }
             else {
                 res.Response({ data: user })
@@ -70,11 +66,11 @@ module.exports = {
             username: req.params.username
         });
         if (!user) {
-            return res.status(404).Response({ message: "User not found !" });
+            return res.status(404).Response({ message: "Utilisateur non trouvé !" });
         }
 
-        await user.delete().exec();
-        res.Response({ message: "User deleted !" });
+        await User.deleteOne({ _id: user._id });
+        res.Response({ message: "Utilisateur supprimé !" });
     },
 
     async updateUser(req, res) {
@@ -82,19 +78,16 @@ module.exports = {
             username: req.params.username
         })
         if (!user) {
-            res.status(404).Response({ message: "User not found !" })
+            res.status(404).Response({ message: "Utilisateur non trouvé !" })
         }
         else {
             UpdateUserModel.validateAsync(req.body).then(async (value) => {
                 await User.findByIdAndUpdate(user._id, {
                     ...value,
                     password: value.password ? bcrypt.hashSync(value.password, parseInt(process.env.UserPasswordSaltRound)) : user.password
-                }, { new: true }, (err, updatedUser) => {
-                    if (err) {
-                        return res.status(400).Response({ message: err.message })
-                    }
-                    res.Response({ data: updatedUser })
                 });
+                const updatedUser = await User.findById(user._id);
+                res.Response({ data: updatedUser })
             }).catch(err => {
                 res.status(400).Response({ message: err.message })
             })
@@ -103,19 +96,24 @@ module.exports = {
 
     async loginUser(req, res) {
         try {
+
+            await LoginModel.validateAsync(req.body).catch(err => {
+                throw new Error(err.message);
+            });
+
             const user_exist = await User.findOne({
                 username: req.body.username,
             });
 
             if (!user_exist) {
-                return res.status(401).Response({ message: "Invalid credentials" });
+                return res.status(401).Response({ message: "Identifiants invalides" });
             }
 
             // Vérifier le mot de passe
             const isPasswordValid = bcrypt.compareSync(req.body.password, user_exist.password);
 
             if (!isPasswordValid) {
-                return res.status(401).Response({ message: "Invalid credentials" });
+                return res.status(401).Response({ message: "Identifiants invalides" });
             }
 
             // Générer le token JWT

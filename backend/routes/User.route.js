@@ -17,7 +17,7 @@ userRouter.get("/", LoginRequired, getAllUsers);
 
 userRouter.get("/:username", LoginRequired, getUserByUsername);
 
-userRouter.delete("/:username", IsAdmin, deleteUser);
+userRouter.delete("/:username", LoginRequired, deleteUser);
 
 userRouter.post("/", IsAdmin, createUser);
 
