@@ -1,0 +1,86 @@
+# version: '3'
+
+services:
+  clipshare_api:
+    container_name: clipshare_api
+    build: ./backend
+    restart: always
+    volumes:
+      - ./backend:/app
+      - /backend/node_modules
+    expose:
+      - 5555
+    ports:
+      - "5555:5000"
+    env_file:
+      - .env
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5555" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      clipshare_mongodb:
+        condition: service_healthy
+      clipshare_redis:
+        condition: service_healthy
+    networks:
+      - clipshare_network
+
+  clipshare_mongodb:
+    image: mongo:8.0.15
+    container_name: clipshare_mongodb
+    restart: always
+    expose:
+      - 27017
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo_data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - clipshare_network
+    env_file:
+      - .env
+
+  clipshare_mongo-express:
+    image: mongo-express:latest
+    container_name: clipshare_mongo-express
+    restart: always
+    ports:
+      - "8081:5000"
+    depends_on:
+      clipshare_mongodb:
+        condition: service_healthy
+    networks:
+      - clipshare_network
+    env_file:
+      - .env
+
+  clipshare_redis:
+    container_name: clipshare_redis
+    image: redis:7.0
+    restart: always
+    volumes:
+      - ./data/redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "6379:6379"
+    networks:
+      - clipshare_network
+    env_file:
+      - .env
+
+networks:
+  clipshare_network:
