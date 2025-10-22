@@ -46,6 +46,10 @@ app.get("/", (req, res, next) => {
   });
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK' });
+});
+
 app.use("/users", userRouter);
 app.use("/clipboards", clipboardRouter);
 

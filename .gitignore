@@ -57,3 +57,6 @@ monitoring/prometheus/*
 .env
 backend/uploads/*
 !backend/uploads/default.png
+
+.DS_Store
+.next/
