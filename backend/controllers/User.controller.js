@@ -119,7 +119,7 @@ module.exports = {
             // Générer le token JWT
             const token = jsonwebtoken.sign(
                 {
-                    id: user_exist.id,
+                    id: user_exist._id,
                     username: user_exist.username,
                     nom_prenom: user_exist.nom_prenom,
                     role: user_exist.role,
@@ -133,6 +133,8 @@ module.exports = {
                 data: {
                     access_token: token,
                     token_type: "Bearer",
+                    expires_in: 86400,
+                    user_id: user_exist._id,
                     username: user_exist.username,
                     nom_prenom: user_exist.nom_prenom
                 }

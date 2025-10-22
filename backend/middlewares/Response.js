@@ -6,6 +6,7 @@ function Response(req, res, next) {
             data: data,
             page: req.query.page ? parseInt(req.query.page) : undefined,
             limit: req.query.limit ? parseInt(req.query.limit) : undefined,
+            total: res.total || undefined,
         });
     };
 

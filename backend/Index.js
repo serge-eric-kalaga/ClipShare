@@ -14,6 +14,7 @@ const { InitUser } = require("./configs/InitData");
 
 // ============ Import Routes
 const userRouter = require("./routes/User.route");
+const clipboardRouter = require("./routes/Clipboard.route");
 // ============ Fin Import Routes
 
 
@@ -33,6 +34,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(loggerMiddleware);
+app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 app.use(Response);
 // ============ Fin bloc Middlewares et Configurations
 
@@ -45,6 +47,7 @@ app.get("/", (req, res, next) => {
 });
 
 app.use("/users", userRouter);
+app.use("/clipboards", clipboardRouter);
 
 
 // Route for testing error handling
