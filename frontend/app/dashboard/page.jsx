@@ -76,6 +76,8 @@ export default function DashboardPage() {
   const [markdownMode, setMarkdownMode] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isSynch, setIsSynch] = useState(true)
+  const [clipboardCreatedAt, setClipboardCreatedAt] = useState("")
+  const [clipboardUpdatedAt, setClipboardUpdatedAt] = useState("")
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -191,6 +193,8 @@ export default function DashboardPage() {
       setContentType(clipboard.contentType || "text")
       setUploadedFiles(clipboard.files || [])
       setMarkdownMode(clipboard.markdownMode || false)
+      setClipboardCreatedAt(clipboard.createdAt || "")
+      setClipboardUpdatedAt(clipboard.updatedAt || "")
     }
     // NE PAS créer de clipboard automatiquement
     // Il sera créé lors de la première saisie de texte
@@ -288,6 +292,8 @@ export default function DashboardPage() {
           const saved = response.data?.data || response.data
           const id = saved?._id
           const url = `${window.location.origin}/clip/${id}`
+          const createdAt = saved?.createdAt || new Date().toISOString()
+          const updatedAt = saved?.updatedAt || new Date().toISOString()
 
           setClipboardUrl(url)
           setClipboardText("")
@@ -299,6 +305,8 @@ export default function DashboardPage() {
           setContentType("text")
           setUploadedFiles([])
           setMarkdownMode(false)
+          setClipboardCreatedAt(createdAt)
+          setClipboardUpdatedAt(updatedAt)
 
           const clipboard = {
             id,
@@ -312,8 +320,8 @@ export default function DashboardPage() {
             contentType: "text",
             files: [],
             markdownMode: false,
-            createdAt: saved?.createdAt || new Date().toISOString(),
-            updatedAt: saved?.updatedAt || new Date().toISOString(),
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             views: saved?.visits || 0,
             lastViewed: null,
             activeViewers: [],
@@ -352,6 +360,8 @@ export default function DashboardPage() {
           const saved = response.data?.data || response.data
           const id = saved?._id
           const url = `${window.location.origin}/clip/${id}`
+          const createdAt = saved?.createdAt || new Date().toISOString()
+          const updatedAt = saved?.updatedAt || new Date().toISOString()
 
           setClipboardUrl(url)
           setClipboardText("")
@@ -363,6 +373,8 @@ export default function DashboardPage() {
           setContentType("text")
           setUploadedFiles([])
           setMarkdownMode(false)
+          setClipboardCreatedAt(createdAt)
+          setClipboardUpdatedAt(updatedAt)
 
           const clipboard = {
             id,
@@ -376,8 +388,8 @@ export default function DashboardPage() {
             contentType: "text",
             files: [],
             markdownMode: false,
-            createdAt: saved?.createdAt || new Date().toISOString(),
-            updatedAt: saved?.updatedAt || new Date().toISOString(),
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             views: saved?.visits || 0,
             lastViewed: null,
             activeViewers: [],
@@ -638,7 +650,9 @@ export default function DashboardPage() {
     if (savedClipboard) {
       const clipboard = JSON.parse(savedClipboard)
       clipboard.title = newTitle
-      clipboard.updatedAt = new Date().toISOString()
+      const newUpdatedAt = new Date().toISOString()
+      clipboard.updatedAt = newUpdatedAt
+      setClipboardUpdatedAt(newUpdatedAt)
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
 
       // AUTO-SAVE après 2 secondes
@@ -673,8 +687,13 @@ export default function DashboardPage() {
           const id = saved?._id
           const url = `${window.location.origin}/clip/${id}`
 
+          const createdAt = saved.createdAt || new Date().toISOString()
+          const updatedAt = saved.updatedAt || new Date().toISOString()
+
           setClipboardUrl(url)
           setCurrentClipboardId(id)
+          setClipboardCreatedAt(createdAt)
+          setClipboardUpdatedAt(updatedAt)
 
           const clipboard = {
             id,
@@ -688,8 +707,8 @@ export default function DashboardPage() {
             contentType: "text",
             files: [],
             markdownMode: markdownMode,
-            createdAt: saved.createdAt || new Date().toISOString(),
-            updatedAt: saved.updatedAt || new Date().toISOString(),
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             views: 0,
             lastViewed: null,
             activeViewers: [],
@@ -707,7 +726,9 @@ export default function DashboardPage() {
         const clipboard = JSON.parse(savedClipboard)
         clipboard.text = newText
         clipboard.markdownMode = markdownMode
-        clipboard.updatedAt = new Date().toISOString()
+        const newUpdatedAt = new Date().toISOString()
+        clipboard.updatedAt = newUpdatedAt
+        setClipboardUpdatedAt(newUpdatedAt)
         localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
 
         // AUTO-SAVE après 2 secondes
@@ -838,6 +859,8 @@ export default function DashboardPage() {
     setContentType(clipboard.contentType || "text")
     setUploadedFiles(clipboard.files || [])
     setMarkdownMode(clipboard.markdownMode || false)
+    setClipboardCreatedAt(clipboard.createdAt || "")
+    setClipboardUpdatedAt(clipboard.updatedAt || "")
     localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
     setShowHistory(false)
 
@@ -1106,6 +1129,22 @@ export default function DashboardPage() {
       return null
     }
 
+    // D'abord vérifier le clipboard actuel
+    const currentClipboard = localStorage.getItem("current_clipboard")
+    if (currentClipboard) {
+      const clipboard = JSON.parse(currentClipboard)
+      if (clipboard.id === clipboardId) {
+        return {
+          views: clipboard.views || 0,
+          lastViewed: clipboard.lastViewed,
+          activeViewers: clipboard.activeViewers || [],
+          createdAt: clipboard.createdAt,
+          updatedAt: clipboard.updatedAt,
+        }
+      }
+    }
+
+    // Sinon chercher dans l'historique
     const history = localStorage.getItem("clipboard_history")
     if (history) {
       const historyArray = JSON.parse(history)
@@ -1769,14 +1808,13 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Créé le</span>
                       <span className="text-xs">
-                        {getClipboardStats(currentClipboardId)?.createdAt &&
-                          formatDate(getClipboardStats(currentClipboardId).createdAt)}
+                        {clipboardCreatedAt ? formatDate(clipboardCreatedAt) : "N/A"}
                       </span>
                     </div>
-                    {getClipboardStats(currentClipboardId)?.updatedAt && (
+                    {clipboardUpdatedAt && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Modifié le</span>
-                        <span className="text-xs">{formatDate(getClipboardStats(currentClipboardId).updatedAt)}</span>
+                        <span className="text-xs">{formatDate(clipboardUpdatedAt)}</span>
                       </div>
                     )}
                   </div>
