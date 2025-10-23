@@ -40,7 +40,21 @@ export default function LoginPage() {
           description: "Bienvenue sur ClipShare !",
         })
 
-        router.push("/dashboard")
+        // Vérifier s'il y a des clipboards locaux à synchroniser
+        const history = localStorage.getItem("clipboard_history")
+        if (history) {
+          const clipboards = JSON.parse(history)
+          const hasLocalClipboards = clipboards.some(clip => clip.id && !clip.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clip.id))
+
+          if (hasLocalClipboards) {
+            router.push("/sync")
+          } else {
+            router.push("/dashboard")
+          }
+        } else {
+          router.push("/dashboard")
+        }
+
         setLoading(false)
       })
       .catch((err) => {

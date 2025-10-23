@@ -24,12 +24,30 @@ const storage = multer.diskStorage({
 
 // Filtrer les types de fichiers autorisés
 const fileFilter = (req, file, cb) => {
-    const allowedMimeTypes = ["image/png", "image/jpeg", "application/pdf", "text/plain"];
+    const allowedMimeTypes = [
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "application/msword", // .doc
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+        "application/vnd.ms-excel", // .xls
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+        "application/zip",
+        "application/x-zip-compressed",
+        "video/mp4",
+        "video/mpeg",
+        "audio/mpeg",
+        "audio/mp3",
+    ];
 
     if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error("Type de fichier non autorisé !"), false);
+        cb(new Error("Type de fichier non autorisé ! Types acceptés : images, PDF, documents Office, archives ZIP, vidéos MP4, audio MP3"), false);
     }
 };
 

@@ -221,6 +221,27 @@ module.exports = {
         }
     },
 
+    async synchLocalClipboard(req, res, next) {
+        // Etant donne que la donnee est deja sur le serveur, on n'a qu'a mettre a jour en mettant le owner
+        try {
+            const { clipboardIds } = req.body;
+
+            if (!Array.isArray(clipboardIds)) {
+                return res.status(400).Response({ message: "Données de presse-papiers invalides !" });
+            }
+
+            for (const clipboardId of clipboardIds) {
+                await Clipboard.findByIdAndUpdate(clipboardId, {
+                    owner: res.user ? res.user.id : null,
+                });
+            }
+
+            res.Response({ message: "Presse-papiers synchronisés avec succès !" });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     // Basculer le statut favori d'un clipboard
     async toggleFavorite(req, res, next) {
         try {

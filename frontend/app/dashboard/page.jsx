@@ -330,113 +330,90 @@ export default function DashboardPage() {
           })
         })
     } else {
-      // Invité : créer localement avec un ID temporaire
-      const id = `local_${Math.random().toString(36).substr(2, 9)}`
-      const url = `${window.location.origin}/clip/${id}`
-
-      setClipboardUrl(url)
-      setClipboardText("")
-      setCurrentClipboardId(id)
-      setClipboardTitle("")
-      setClipboardPassword("")
-      setClipboardExpiration(null)
-      setClipboardReadOnly(false)
-      setContentType("text")
-      setUploadedFiles([])
-      setMarkdownMode(false)
-
-      const clipboard = {
-        id,
-        url,
-        text: "",
+      // Invité : créer sur le serveur SANS authentification
+      const payload = {
         title: "Sans titre",
-        isFavorite: false,
-        password: "",
-        expiration: null,
-        readOnly: false,
-        contentType: "text",
+        content: "",
         files: [],
-        markdownMode: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        views: 0,
-        lastViewed: null,
-        activeViewers: [],
+        password: null,
+        expireAt: null,
+        readOnly: false,
       }
 
-      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+      axios
+        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload)
+        .then((response) => {
+          const saved = response.data?.data || response.data
+          const id = saved?._id
+          const url = `${window.location.origin}/clip/${id}`
 
-      const history = localStorage.getItem("clipboard_history")
-      const historyArray = history ? JSON.parse(history) : []
-      historyArray.unshift(clipboard)
-      localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
-      setClipboardHistory(historyArray)
+          setClipboardUrl(url)
+          setClipboardText("")
+          setCurrentClipboardId(id)
+          setClipboardTitle("")
+          setClipboardPassword("")
+          setClipboardExpiration(null)
+          setClipboardReadOnly(false)
+          setContentType("text")
+          setUploadedFiles([])
+          setMarkdownMode(false)
 
-      toast({
-        title: "Nouveau clipboard créé",
-        description: "Connectez-vous pour sauvegarder en ligne",
-      })
+          const clipboard = {
+            id,
+            url,
+            text: "",
+            title: "Sans titre",
+            isFavorite: false,
+            password: "",
+            expiration: null,
+            readOnly: false,
+            contentType: "text",
+            files: [],
+            markdownMode: false,
+            createdAt: saved?.createdAt || new Date().toISOString(),
+            updatedAt: saved?.updatedAt || new Date().toISOString(),
+            views: saved?.visits || 0,
+            lastViewed: null,
+            activeViewers: [],
+          }
+
+          localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+
+          const history = localStorage.getItem("clipboard_history")
+          const historyArray = history ? JSON.parse(history) : []
+          historyArray.unshift(clipboard)
+          localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+          setClipboardHistory(historyArray)
+
+          toast({
+            title: "Nouveau clipboard créé",
+            description: "Connectez-vous pour accéder à tous vos clipboards",
+          })
+        })
+        .catch((err) => {
+          console.error("Erreur création clipboard:", err)
+          toast({
+            title: "Erreur",
+            description: err?.response?.data?.message || "Une erreur est survenue",
+            variant: "destructive",
+          })
+        })
     }
   }
 
   const saveToHistory = (clipboard) => {
-    if (!isGuest && user) {
-      // Ne pas sauvegarder si l'ID est manquant ou invalide
-      if (!clipboard.id) {
-        console.warn("Cannot save clipboard without ID")
-        return
-      }
+    // Ne pas sauvegarder si l'ID est manquant ou invalide
+    if (!clipboard.id) {
+      console.warn("Cannot save clipboard without ID")
+      return
+    }
 
-      // Vérifier si c'est un clipboard local (créé par un invité ou avec préfixe local_)
-      // OU si l'ID n'est pas un ObjectId valide (pas 24 caractères hexadécimaux)
-      const isLocalClipboard = clipboard.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(clipboard.id)
+    // Vérifier si c'est un clipboard local (créé par un invité ou avec préfixe local_)
+    // OU si l'ID n'est pas un ObjectId valide (pas 24 caractères hexadécimaux)
+    const isLocalClipboard = clipboard.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(clipboard.id)
 
-      // Si c'est un clipboard local, créer un nouveau clipboard sur le backend
-      if (isLocalClipboard) {
-        const payload = {
-          title: clipboard.title || "Sans titre",
-          content: clipboard.text || "",
-          files: clipboard.files || [],
-          password: clipboard.password || null,
-          expireAt: clipboard.expiresAt || null,
-          readOnly: clipboard.readOnly || false,
-        }
-
-        // CRÉATION : pas d'_id du tout
-        const url = `${process.env.NEXT_PUBLIC_API_URL}/clipboards`
-
-        axios
-          .post(url, payload, {
-            headers: { Authorization: `Bearer ${user?.access_token}` },
-          })
-          .then((response) => {
-            const saved = response.data?.data || response.data
-
-            // Mettre à jour avec l'ID du backend
-            if (saved?._id) {
-              const newId = saved._id
-              const newUrl = `${window.location.origin}/clip/${newId}`
-
-              setCurrentClipboardId(newId)
-              setClipboardUrl(newUrl)
-
-              clipboard.id = newId
-              clipboard.url = newUrl
-              clipboard.createdAt = saved.createdAt
-              clipboard.updatedAt = saved.updatedAt
-
-              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-            }
-
-            loadClipboardHistory()
-          })
-          .catch((err) => {
-            console.error("Erreur création clipboard:", err)
-          })
-        return // Important: sortir ici pour ne pas continuer
-      }
-
-      // Utilisateur connecté avec un clipboard backend : MISE À JOUR uniquement
+    // Si c'est un clipboard local, créer un nouveau clipboard sur le backend
+    if (isLocalClipboard) {
       const payload = {
         title: clipboard.title || "Sans titre",
         content: clipboard.text || "",
@@ -444,59 +421,115 @@ export default function DashboardPage() {
         password: clipboard.password || null,
         expireAt: clipboard.expiresAt || null,
         readOnly: clipboard.readOnly || false,
-        _id: clipboard.id,
       }
 
-      // MISE À JOUR : _id en query parameter ET dans le body
-      const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${clipboard.id}`
+      // CRÉATION : pas d'_id du tout
+      const config = user ? {
+        headers: { Authorization: `Bearer ${user?.access_token}` },
+      } : {}
 
       axios
-        .post(updateUrl, payload, {
-          headers: { Authorization: `Bearer ${user?.access_token}` },
-        })
+        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, config)
         .then((response) => {
-          loadClipboardHistory()
+          const saved = response.data?.data || response.data
+
+          // Mettre à jour avec l'ID du backend
+          if (saved?._id) {
+            const newId = saved._id
+            const newUrl = `${window.location.origin}/clip/${newId}`
+
+            setCurrentClipboardId(newId)
+            setClipboardUrl(newUrl)
+
+            clipboard.id = newId
+            clipboard.url = newUrl
+            clipboard.createdAt = saved.createdAt
+            clipboard.updatedAt = saved.updatedAt
+
+            localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+          }
+
+          if (user) {
+            loadClipboardHistory()
+          }
         })
         .catch((err) => {
-          console.error("Erreur mise à jour clipboard:", err)
+          console.error("Erreur création clipboard:", err)
         })
-    } else {
-      // Invité : sauvegarder uniquement en localStorage
-      const history = localStorage.getItem("clipboard_history")
-      const historyArray = history ? JSON.parse(history) : []
-      const existingIndex = historyArray.findIndex((item) => item.id === clipboard.id)
-
-      if (existingIndex !== -1) {
-        historyArray[existingIndex] = clipboard
-      } else {
-        historyArray.unshift(clipboard)
-      }
-
-      localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
-      setClipboardHistory(historyArray)
+      return // Important: sortir ici pour ne pas continuer
     }
+
+    // Clipboard avec ID valide : MISE À JOUR sur le serveur (invité ou connecté)
+    const payload = {
+      title: clipboard.title || "Sans titre",
+      content: clipboard.text || "",
+      files: clipboard.files || [],
+      password: clipboard.password || null,
+      expireAt: clipboard.expiresAt || null,
+      readOnly: clipboard.readOnly || false,
+      _id: clipboard.id,
+    }
+
+    // MISE À JOUR : _id en query parameter ET dans le body
+    const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${clipboard.id}`
+    const config = user ? {
+      headers: { Authorization: `Bearer ${user?.access_token}` },
+    } : {}
+
+    axios
+      .post(updateUrl, payload, config)
+      .then((response) => {
+        if (user) {
+          // Si connecté, recharger depuis le serveur
+          loadClipboardHistory()
+        } else {
+          // Si invité, mettre à jour localStorage
+          const history = localStorage.getItem("clipboard_history")
+          const historyArray = history ? JSON.parse(history) : []
+          const existingIndex = historyArray.findIndex((item) => item.id === clipboard.id)
+
+          if (existingIndex !== -1) {
+            historyArray[existingIndex] = clipboard
+          } else {
+            historyArray.unshift(clipboard)
+          }
+
+          localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+          setClipboardHistory(historyArray)
+        }
+      })
+      .catch((err) => {
+        console.error("Erreur mise à jour clipboard:", err)
+      })
   }
 
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
 
-    if (!isGuest && user && currentClipboardId && !currentClipboardId.startsWith("local_")) {
-      // Utilisateur connecté avec clipboard backend : upload via API
+    // Si on a un clipboard avec ID valide (pas local_), utiliser l'API de upload
+    if (currentClipboardId && !currentClipboardId.startsWith("local_") && /^[a-f0-9]{24}$/i.test(currentClipboardId)) {
+      // Upload via API (avec ou sans authentification)
       for (const file of files) {
         const formData = new FormData()
         formData.append("file", file)
 
         try {
+          const config = {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+
+          // Ajouter l'authentification si l'utilisateur est connecté
+          if (user) {
+            config.headers.Authorization = `Bearer ${user?.access_token}`
+          }
+
           const response = await axios.post(
             `${process.env.NEXT_PUBLIC_API_URL}/clipboards/file?clipboardId=${currentClipboardId}`,
             formData,
-            {
-              headers: {
-                Authorization: `Bearer ${user?.access_token}`,
-                "Content-Type": "multipart/form-data",
-              },
-            }
+            config
           )
 
           const updatedClipboard = response.data?.data
@@ -517,51 +550,20 @@ export default function DashboardPage() {
           console.error("Erreur upload fichier:", error)
           toast({
             title: "Erreur",
-            description: `Impossible de télécharger ${file.name}`,
+            description: error.response?.data?.message || `Impossible de télécharger ${file.name}`,
             variant: "destructive",
           })
         }
       }
-      loadClipboardHistory()
-    } else {
-      // Invité ou clipboard local : stockage en base64
-      const filePromises = files.map((file) => {
-        return new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.onload = (event) => {
-            resolve({
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              data: event.target.result,
-              uploadedAt: new Date().toISOString(),
-            })
-          }
-          reader.readAsDataURL(file)
-        })
-      })
-
-      const newFiles = await Promise.all(filePromises)
-      const updatedFiles = [...uploadedFiles, ...newFiles]
-      setUploadedFiles(updatedFiles)
-
-      const savedClipboard = localStorage.getItem("current_clipboard")
-      if (savedClipboard) {
-        const clipboard = JSON.parse(savedClipboard)
-        clipboard.files = updatedFiles
-        clipboard.contentType = "mixed"
-        clipboard.updatedAt = new Date().toISOString()
-        localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-
-        // Trigger auto-save
-        debouncedSave()
+      if (user) {
+        loadClipboardHistory()
       }
-
-      setContentType("mixed")
-
+    } else {
+      // Pas encore de clipboard ou clipboard local : créer d'abord un clipboard
       toast({
-        title: "Fichiers ajoutés",
-        description: `${newFiles.length} fichier(s) ajouté(s) avec succès`,
+        title: "Information",
+        description: "Veuillez d'abord créer un clipboard avant d'ajouter des fichiers",
+        variant: "default",
       })
     }
   }
@@ -643,8 +645,8 @@ export default function DashboardPage() {
     setClipboardText(newText)
 
     // Si pas de clipboard existant, en créer un d'abord
-    if (!currentClipboardId && !isGuest && user) {
-      // Utilisateur connecté : créer sur le backend
+    if (!currentClipboardId) {
+      // Créer sur le serveur (avec ou sans authentification)
       const payload = {
         title: clipboardTitle || "Sans titre",
         content: newText,
@@ -654,10 +656,12 @@ export default function DashboardPage() {
         readOnly: false,
       }
 
+      const config = user ? {
+        headers: { Authorization: `Bearer ${user?.access_token}` },
+      } : {}
+
       axios
-        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, {
-          headers: { Authorization: `Bearer ${user?.access_token}` },
-        })
+        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, config)
         .then((response) => {
           const saved = response.data?.data || response.data
           const id = saved?._id
@@ -690,35 +694,6 @@ export default function DashboardPage() {
         .catch((err) => {
           console.error("Erreur création clipboard:", err)
         })
-    } else if (!currentClipboardId && isGuest) {
-      // Invité : créer localement (sans ajouter à l'historique tout de suite)
-      const id = `local_${Math.random().toString(36).substr(2, 9)}`
-      const url = `${window.location.origin}/clip/${id}`
-
-      setClipboardUrl(url)
-      setCurrentClipboardId(id)
-
-      const clipboard = {
-        id,
-        url,
-        text: newText,
-        title: clipboardTitle || "Sans titre",
-        isFavorite: false,
-        password: "",
-        expiration: null,
-        readOnly: false,
-        contentType: "text",
-        files: [],
-        markdownMode: markdownMode,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        views: 0,
-        lastViewed: null,
-        activeViewers: [],
-      }
-
-      // Sauvegarder uniquement le clipboard actuel, PAS dans l'historique
-      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
     } else {
       // Clipboard existe déjà : mise à jour localStorage et debounce
       const savedClipboard = localStorage.getItem("current_clipboard")
@@ -758,15 +733,17 @@ export default function DashboardPage() {
   }
 
   const handleToggleFavorite = async (clipboardId) => {
-    // Si utilisateur connecté ET clipboard backend (ObjectId valide), utiliser l'API
-    if (!isGuest && user && /^[a-f0-9]{24}$/i.test(clipboardId)) {
+    // Si clipboard backend (ObjectId valide), utiliser l'API (connecté ou invité)
+    if (/^[a-f0-9]{24}$/i.test(clipboardId)) {
       try {
+        const config = user ? {
+          headers: { Authorization: `Bearer ${user.access_token}` },
+        } : {}
+
         const response = await axios.patch(
           `${process.env.NEXT_PUBLIC_API_URL}/clipboards/${clipboardId}/favorite`,
           {},
-          {
-            headers: { Authorization: `Bearer ${user.access_token}` },
-          }
+          config
         )
 
         const updatedClipboard = response.data?.data || response.data
@@ -779,7 +756,31 @@ export default function DashboardPage() {
         })
 
         // Recharger l'historique pour refléter le changement
-        loadClipboardHistory()
+        if (user) {
+          loadClipboardHistory()
+        } else {
+          // Pour les invités, mettre à jour localStorage
+          const history = localStorage.getItem("clipboard_history")
+          if (history) {
+            const historyArray = JSON.parse(history)
+            const clipboardIndex = historyArray.findIndex((item) => item.id === clipboardId)
+
+            if (clipboardIndex !== -1) {
+              historyArray[clipboardIndex].isFavorite = updatedClipboard.isFavorite
+              localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+              setClipboardHistory(historyArray)
+
+              if (clipboardId === currentClipboardId) {
+                const savedClipboard = localStorage.getItem("current_clipboard")
+                if (savedClipboard) {
+                  const clipboard = JSON.parse(savedClipboard)
+                  clipboard.isFavorite = updatedClipboard.isFavorite
+                  localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+                }
+              }
+            }
+          }
+        }
       } catch (error) {
         console.error("Erreur toggle favorite:", error)
         toast({
@@ -789,7 +790,7 @@ export default function DashboardPage() {
         })
       }
     } else {
-      // Mode invité ou clipboard local : utiliser localStorage
+      // Clipboard local (ne devrait plus arriver) : utiliser localStorage uniquement
       const history = localStorage.getItem("clipboard_history")
       if (history) {
         const historyArray = JSON.parse(history)
