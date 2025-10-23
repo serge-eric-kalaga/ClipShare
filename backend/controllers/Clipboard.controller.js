@@ -56,8 +56,25 @@ module.exports = {
                 return res.status(404).Response({ message: "Entrée du presse-papiers non trouvée !" });
             }
 
-            // Vérifier les permissions d'accès
-            if (entry.owner && (!res.user || entry.owner.toString() !== res.user.id.toString()) && entry.readOnly === true) {
+            // Pour les routes publiques (/share/:id), permettre l'accès si :
+            // 1. Le clipboard n'a pas de propriétaire (anonyme)
+            // 2. Le clipboard n'est pas en readOnly (lecture seule = accessible à tous)
+            // 3. L'utilisateur est le propriétaire
+            const isPublicRoute = req.path.includes('/share/')
+            const isOwner = res.user && entry.owner && entry.owner.toString() === res.user.id.toString()
+            const isPublicAccess = !entry.owner || entry.readOnly === false
+
+            // Si route publique ET (pas de owner OU readOnly=false), autoriser
+            // OU si utilisateur est le owner, autoriser
+            if (isPublicRoute && isPublicAccess) {
+                // Accès public autorisé
+            } else if (isOwner) {
+                // Propriétaire = accès total
+            } else if (!isPublicRoute && entry.readOnly === true && !isOwner) {
+                // Route privée + readOnly + pas owner = refusé
+                return res.status(403).Response({ message: "Vous n'êtes pas autorisé à accéder à cette entrée du presse-papiers !" });
+            } else if (!isPublicRoute && entry.owner && !isOwner) {
+                // Route privée + a un owner + pas owner = refusé
                 return res.status(403).Response({ message: "Vous n'êtes pas autorisé à accéder à cette entrée du presse-papiers !" });
             }
 

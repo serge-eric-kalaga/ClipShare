@@ -32,6 +32,7 @@ import {
   Download,
   LogIn,
   AlertCircle,
+  Infinity,
 } from "lucide-react"
 import QRCodeDisplay from "@/components/qr-code-display"
 import { ThemeToggle } from "@/components/theme-toggle"

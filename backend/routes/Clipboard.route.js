@@ -9,6 +9,9 @@ clipboardRouter.post("/", LoginRequired, clipboardEntry);
 
 clipboardRouter.post("/file", LoginRequired, upload.single("file"), addClipboardFile);
 
+// Route publique pour voir un clipboard partagé (sans authentification requise)
+clipboardRouter.get("/share/:id", getClipboardEntry);
+
 clipboardRouter.get("/:id", LoginRequired, getClipboardEntry);
 
 clipboardRouter.get("/", LoginRequired, getClipboardEntries);
