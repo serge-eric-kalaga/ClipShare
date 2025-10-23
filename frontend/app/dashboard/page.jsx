@@ -90,6 +90,13 @@ export default function DashboardPage() {
   // Ref pour le timer de debounce (auto-save après 2 secondes)
   const saveTimerRef = useRef(null)
 
+  // Fonction pour vérifier si le clipboard actuel est vide
+  const isCurrentClipboardEmpty = () => {
+    const hasText = clipboardText.trim().length > 0
+    const hasFiles = uploadedFiles.length > 0
+    return !hasText && !hasFiles
+  }
+
   useEffect(() => {
     const userData = localStorage.getItem("clipshare_user")
     let currentUser = null
@@ -1529,6 +1536,7 @@ export default function DashboardPage() {
                         variant="default"
                         size="sm"
                         onClick={generateNewClipboard}
+                        disabled={isCurrentClipboardEmpty()}
                         className="flex-1 sm:flex-none"
                       >
                         <Plus className="h-4 w-4 sm:mr-2" />
