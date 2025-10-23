@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { encryptData } from "@/hooks/functions"
 import { useToast } from "@/hooks/use-toast"
-import { Clipboard, ArrowRight } from "lucide-react"
+import { Clipboard, ArrowRight, Eye, EyeOff } from "lucide-react"
+import axios from "axios"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,29 +18,40 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
 
   const handleLogin = (e) => {
     e.preventDefault()
     setLoading(true)
 
-    // Simulate login
-    setTimeout(() => {
-      const user = {
-        email,
-        name: email.split("@")[0],
-        id: Math.random().toString(36).substr(2, 9),
-      }
+    axios.post(`${process.env.NEXT_PUBLIC_API_URL}/users/auth/login`, {
+      username: email,
+      password: password,
+    })
+      .then((response) => {
+        const user = response?.data?.data;
+        const userData = JSON.stringify(user);
 
-      localStorage.setItem("clipshare_user", JSON.stringify(user))
+        const encryptedData = encryptData(userData);
+        localStorage.setItem("clipshare_user", encryptedData)
 
-      toast({
-        title: "Connexion réussie",
-        description: "Bienvenue sur ClipShare !",
+        toast({
+          title: "Connexion réussie",
+          description: "Bienvenue sur ClipShare !",
+        })
+
+        router.push("/dashboard")
+        setLoading(false)
       })
+      .catch((err) => {
+        console.log(err);
 
-      router.push("/dashboard")
-      setLoading(false)
-    }, 1000)
+        toast({
+          title: "Erreur lors de la connexion",
+          description: err.response?.data?.message || "Une erreur est survenue. Veuillez réessayer.",
+        })
+        setLoading(false)
+      })
   }
 
   return (
@@ -74,17 +87,26 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={passwordVisible ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5"
+                    onClick={() => setPasswordVisible(!passwordVisible)}
+                  >
+                    {passwordVisible ? <EyeOff /> : <Eye />}
+                  </button>
+                </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
+            <CardFooter className="flex flex-col gap-4 mt-3">
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
                   <>Connexion en cours...</>

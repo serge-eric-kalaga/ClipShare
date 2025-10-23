@@ -49,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReactMarkdown from "react-markdown"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Alert, AlertDescription } from "@/components/ui/alert" // Imported Alert component
+import { decryptData } from "@/hooks/functions"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -78,8 +79,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("clipshare_user")
+
     if (userData) {
-      setUser(JSON.parse(userData))
+      const decryptedData = decryptData(userData);
+      console.log(decryptedData);
+      setUser(JSON.parse(decryptedData))
       setIsGuest(false)
       setShowAuthNotification(false)
     } else {
@@ -414,7 +418,7 @@ export default function DashboardPage() {
     localStorage.removeItem("auth_notification_dismissed")
     toast({
       title: "Déconnexion réussie",
-      description: "Vous êtes maintenant en mode invité",
+      description: <span className="text-red-600">Vous êtes maintenant en mode invité</span>,
     })
   }
 
@@ -625,8 +629,8 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold">ClipShare</h1>
-                <p className="text-xs text-muted-foreground hidden sm:block">
-                  {isGuest ? "Mode invité" : `Bienvenue, ${user.name}`}
+                <p className={`text-xs text-muted-foreground hidden sm:block ${isGuest ? "italic text-red-600" : ""}`}>
+                  {isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}
                 </p>
               </div>
             </div>
@@ -716,7 +720,7 @@ export default function DashboardPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <p className="text-sm font-medium mb-1">Mode invité</p>
+                <p className="text-sm font-medium mb-1 text-red-600">Mode invité</p>
                 <p className="text-xs text-muted-foreground">
                   Vos données sont stockées localement. Connectez-vous pour sauvegarder vos clipboards de manière
                   permanente.

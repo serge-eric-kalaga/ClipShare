@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Clipboard, ArrowRight } from "lucide-react"
+import { Clipboard, ArrowRight, Eye, EyeOff } from "lucide-react"
+import axios from "axios"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -17,6 +18,9 @@ export default function SignupPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [passwordVisible, setPasswordVisible] = useState(false)
 
   const handleSignup = (e) => {
     e.preventDefault()
@@ -25,19 +29,38 @@ export default function SignupPage() {
     // Simulate signup
     setTimeout(() => {
       const user = {
-        email,
-        name,
-        id: Math.random().toString(36).substr(2, 9),
+        username: email,
+        nom_prenom: name,
+        password: password,
       }
 
-      localStorage.setItem("clipshare_user", JSON.stringify(user))
+      const registerUserURL = `${process.env.NEXT_PUBLIC_API_URL}/users/auth/register`;
 
-      toast({
-        title: "Compte créé avec succès",
-        description: "Bienvenue sur ClipShare !",
-      })
+      axios.post(registerUserURL, user)
+        .then((response) => {
 
-      router.push("/dashboard")
+          const { dismiss } = toast({
+            title: "Compte créé avec succès",
+            description: "Bienvenue sur ClipShare !",
+            action: <Link href="#" onClick={(e) => {
+              e.preventDefault()
+              dismiss()
+              setTimeout(() => router.push("/login"), 100)
+            }} className="font-medium text-blue-500">Se connecter</Link>,
+          })
+
+        })
+        .catch((err) => {
+          console.log(err);
+
+          toast({
+            title: "Erreur lors de la création du compte",
+            description: err.response?.data?.message || "Une erreur est survenue. Veuillez réessayer.",
+          })
+          setLoading(false)
+        })
+
+      // router.push("/login")
       setLoading(false)
     }, 1000)
   }
@@ -63,11 +86,11 @@ export default function SignupPage() {
           <form onSubmit={handleSignup}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Nom</Label>
+                <Label htmlFor="name">Nom et prénom</Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="Votre nom"
+                  placeholder="Votre nom complet"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -86,18 +109,26 @@ export default function SignupPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={passwordVisible ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5"
+                    onClick={() => setPasswordVisible(!passwordVisible)}
+                  >
+                    {passwordVisible ? <EyeOff /> : <Eye />}
+                  </button>
+                </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
+            <CardFooter className="flex flex-col gap-4 mt-3">
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
                   <>Création en cours...</>

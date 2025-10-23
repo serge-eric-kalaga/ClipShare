@@ -136,7 +136,7 @@ module.exports = {
                     expires_in: 86400,
                     user_id: user_exist._id,
                     username: user_exist.username,
-                    nom_prenom: user_exist.nom_prenom
+                    nom_prenom: user_exist.nom_prenom,
                 }
             });
 
