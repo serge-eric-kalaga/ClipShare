@@ -9,6 +9,7 @@ const ClipboardSchema = mongoose.Schema({
     password: { type: String, required: false, default: null, nullable: true },
     expireAt: { type: Date, required: false, default: null, nullable: true },
     readOnly: { type: Boolean, required: false, default: false, nullable: true },
+    isFavorite: { type: Boolean, required: false, default: false, nullable: true },
     visits: { type: Number, required: false, default: 0, nullable: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false, default: null, nullable: true },
 },
@@ -26,6 +27,7 @@ const CreateClipboardModel = Joi.object({
     password: Joi.string().allow(null).optional().allow('').default(null),
     expireAt: Joi.date().greater('now').allow(null).optional().allow('').default(null),
     readOnly: Joi.boolean().optional().allow('').default(null),
+    isFavorite: Joi.boolean().optional().allow('').default(null),
 }).messages({
     "object.unknown": "Des champs non autorisés ont été fournis.",
 });

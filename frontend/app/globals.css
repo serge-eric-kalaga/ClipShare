@@ -118,7 +118,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom class for favorite star icon */
+.star-favorite {
+  fill: #eab308 !important;
+  stroke: #eab308 !important;
+  color: #eab308 !important;
+}
+
+.star-favorite svg {
+  fill: #eab308 !important;
+  stroke: #eab308 !important;
 }

@@ -1,5 +1,5 @@
 const express = require("express");
-const { addClipboardFile, getClipboardEntry, clipboardEntry, deleteClipboardEntry, getClipboardEntries } = require("../controllers/Clipboard.controller");
+const { addClipboardFile, getClipboardEntry, clipboardEntry, deleteClipboardEntry, getClipboardEntries, toggleFavorite } = require("../controllers/Clipboard.controller");
 const { IsAdmin, LoginRequired } = require("../middlewares/Auth");
 const { upload } = require("../middlewares/Upload");
 
@@ -15,6 +15,9 @@ clipboardRouter.get("/share/:id", getClipboardEntry);
 clipboardRouter.get("/:id", LoginRequired, getClipboardEntry);
 
 clipboardRouter.get("/", LoginRequired, getClipboardEntries);
+
+// Route pour basculer le statut favori
+clipboardRouter.patch("/:id/favorite", LoginRequired, toggleFavorite);
 
 clipboardRouter.delete("/:id", LoginRequired, deleteClipboardEntry);
 

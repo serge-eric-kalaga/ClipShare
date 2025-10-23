@@ -223,4 +223,32 @@ module.exports = {
         }
     },
 
+    // Basculer le statut favori d'un clipboard
+    async toggleFavorite(req, res, next) {
+        try {
+            const clipboardId = req.params.id;
+            const entry = await Clipboard.findById(clipboardId);
+
+            if (!entry) {
+                return res.status(404).Response({ message: "Clipboard non trouvé !" });
+            }
+
+            // Vérifier si l'utilisateur est le propriétaire
+            if (!res.user || entry.owner.toString() !== res.user.id.toString()) {
+                return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier ce clipboard !" });
+            }
+
+            // Basculer le statut favori
+            entry.isFavorite = !entry.isFavorite;
+            await entry.save();
+
+            res.Response({
+                data: entry,
+                message: entry.isFavorite ? "Clipboard ajouté aux favoris" : "Clipboard retiré des favoris"
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
 }

@@ -740,32 +740,65 @@ export default function DashboardPage() {
     })
   }
 
-  const handleToggleFavorite = (clipboardId) => {
-    const history = localStorage.getItem("clipboard_history")
-    if (history) {
-      const historyArray = JSON.parse(history)
-      const clipboardIndex = historyArray.findIndex((item) => item.id === clipboardId)
-
-      if (clipboardIndex !== -1) {
-        historyArray[clipboardIndex].isFavorite = !historyArray[clipboardIndex].isFavorite
-        localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
-        setClipboardHistory(historyArray)
-
-        if (clipboardId === currentClipboardId) {
-          const savedClipboard = localStorage.getItem("current_clipboard")
-          if (savedClipboard) {
-            const clipboard = JSON.parse(savedClipboard)
-            clipboard.isFavorite = historyArray[clipboardIndex].isFavorite
-            localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+  const handleToggleFavorite = async (clipboardId) => {
+    // Si utilisateur connecté ET clipboard backend (ObjectId valide), utiliser l'API
+    if (!isGuest && user && /^[a-f0-9]{24}$/i.test(clipboardId)) {
+      try {
+        const response = await axios.patch(
+          `${process.env.NEXT_PUBLIC_API_URL}/clipboards/${clipboardId}/favorite`,
+          {},
+          {
+            headers: { Authorization: `Bearer ${user.access_token}` },
           }
-        }
+        )
+
+        const updatedClipboard = response.data?.data || response.data
 
         toast({
-          title: historyArray[clipboardIndex].isFavorite ? "Ajouté aux favoris" : "Retiré des favoris",
-          description: historyArray[clipboardIndex].isFavorite
+          title: updatedClipboard.isFavorite ? "Ajouté aux favoris" : "Retiré des favoris",
+          description: response.data?.message || (updatedClipboard.isFavorite
             ? "Ce clipboard est maintenant dans vos favoris"
-            : "Ce clipboard a été retiré de vos favoris",
+            : "Ce clipboard a été retiré de vos favoris"),
         })
+
+        // Recharger l'historique pour refléter le changement
+        loadClipboardHistory()
+      } catch (error) {
+        console.error("Erreur toggle favorite:", error)
+        toast({
+          title: "Erreur",
+          description: "Impossible de mettre à jour le statut favori",
+          variant: "destructive",
+        })
+      }
+    } else {
+      // Mode invité ou clipboard local : utiliser localStorage
+      const history = localStorage.getItem("clipboard_history")
+      if (history) {
+        const historyArray = JSON.parse(history)
+        const clipboardIndex = historyArray.findIndex((item) => item.id === clipboardId)
+
+        if (clipboardIndex !== -1) {
+          historyArray[clipboardIndex].isFavorite = !historyArray[clipboardIndex].isFavorite
+          localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+          setClipboardHistory(historyArray)
+
+          if (clipboardId === currentClipboardId) {
+            const savedClipboard = localStorage.getItem("current_clipboard")
+            if (savedClipboard) {
+              const clipboard = JSON.parse(savedClipboard)
+              clipboard.isFavorite = historyArray[clipboardIndex].isFavorite
+              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+            }
+          }
+
+          toast({
+            title: historyArray[clipboardIndex].isFavorite ? "Ajouté aux favoris" : "Retiré des favoris",
+            description: historyArray[clipboardIndex].isFavorite
+              ? "Ce clipboard est maintenant dans vos favoris"
+              : "Ce clipboard a été retiré de vos favoris",
+          })
+        }
       }
     }
   }
@@ -1216,8 +1249,8 @@ export default function DashboardPage() {
                               <span className="text-sm font-semibold break-all">
                                 {clipboard.title || `Clipboard #${clipboard.id}`}
                               </span>
-                              {clipboard.isFavorite && (
-                                <Star className="h-4 w-4 fill-yellow-500 text-yellow-500 shrink-0" />
+                              {clipboard?.isFavorite && (
+                                <Star className="h-4 w-4 shrink-0 star-favorite" />
                               )}
                               {clipboard.password && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
                               {clipboard.readOnly && <Eye className="h-4 w-4 text-muted-foreground shrink-0" />}
@@ -1261,10 +1294,13 @@ export default function DashboardPage() {
                               size="sm"
                               onClick={() => handleToggleFavorite(clipboard.id)}
                               className="flex-1 sm:flex-none"
+                              title={clipboard.isFavorite === true ? "Retirer des favoris" : "Ajouter aux favoris"}
                             >
-                              <Star
-                                className={`h-4 w-4 ${clipboard.isFavorite ? "fill-current text-yellow-500" : ""}`}
-                              />
+                              {clipboard.isFavorite === true ? (
+                                <Star className="h-4 w-4 star-favorite" />
+                              ) : (
+                                <Star className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
                               variant="outline"
