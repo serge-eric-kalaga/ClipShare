@@ -75,6 +75,7 @@ export default function DashboardPage() {
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [markdownMode, setMarkdownMode] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isSynch, setIsSynch] = useState(true)
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -248,6 +249,9 @@ export default function DashboardPage() {
 
   // Fonction pour sauvegarder automatiquement après 2 secondes de pause
   const debouncedSave = useCallback(() => {
+    // Indiquer que des modifications sont en attente de synchronisation
+    setIsSynch(false)
+
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
     }
@@ -257,6 +261,8 @@ export default function DashboardPage() {
       if (savedClipboard) {
         const clipboard = JSON.parse(savedClipboard)
         saveToHistory(clipboard)
+        // Une fois sauvegardé sur le serveur, marquer comme synchronisé
+        setIsSynch(true)
       }
     }, 2000)
   }, [isGuest, user]) // Dépendances nécessaires pour saveToHistory
@@ -1706,8 +1712,8 @@ export default function DashboardPage() {
                         )}
                       </div>
                       <span className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
-                        Sync temps réel
+                        <span className={"h-2 w-2 rounded-full animate-pulse " + (isSynch ? "bg-green-500" : "bg-orange-500")} />
+                        {isSynch ? "Synchronisé" : "Non synchronisé"}
                       </span>
                     </div>
                   </div>
