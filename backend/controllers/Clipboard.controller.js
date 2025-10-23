@@ -108,6 +108,7 @@ module.exports = {
 
             const totalEntries = await Clipboard.countDocuments(query);
             const entries = await Clipboard.find(query)
+                .sort({ createdAt: -1 }) // Trier par date de création, du plus récent au plus ancien
                 .skip((page - 1) * limit)
                 .limit(limit);
             res.total = totalEntries;

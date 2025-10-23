@@ -33,6 +33,8 @@ import {
   LogIn,
   AlertCircle,
   Infinity,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import QRCodeDisplay from "@/components/qr-code-display"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -73,6 +75,11 @@ export default function DashboardPage() {
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [markdownMode, setMarkdownMode] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
+  const [totalItems, setTotalItems] = useState(0) // Total d'éléments depuis l'API
 
   const [showSecurityDialog, setShowSecurityDialog] = useState(false)
   const [clipboardPassword, setClipboardPassword] = useState("")
@@ -123,13 +130,15 @@ export default function DashboardPage() {
 
     // Charger l'historique avec les valeurs locales (pas les états)
     if (!guest && currentUser) {
-      // Utilisateur connecté : charger depuis l'API
+      // Utilisateur connecté : charger depuis l'API avec pagination
       axios
-        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, {
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?page=1&limit=${itemsPerPage}`, {
           headers: { Authorization: `Bearer ${currentUser?.access_token}` },
         })
         .then((response) => {
           const backendClipboards = response.data?.data || []
+          const total = response.data?.total || backendClipboards.length
+          setTotalItems(total)
           const mappedClipboards = backendClipboards.map((clip) => ({
             id: clip._id,
             url: `${window.location.origin}/clip/${clip._id}`,
@@ -190,11 +199,13 @@ export default function DashboardPage() {
     // Charger l'historique selon le statut de l'utilisateur
     if (!isGuest && user) {
       axios
-        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, {
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?page=${currentPage}&limit=${itemsPerPage}`, {
           headers: { Authorization: `Bearer ${user?.access_token}` },
         })
         .then((response) => {
           const backendClipboards = response.data?.data || []
+          const total = response.data?.total || backendClipboards.length
+          setTotalItems(total)
           // Mapper les champs backend vers frontend
           const mappedClipboards = backendClipboards.map((clip) => ({
             id: clip._id,
@@ -923,6 +934,39 @@ export default function DashboardPage() {
     return matchesSearch && matchesFavorite
   })
 
+  // Pagination logic - différent pour API vs localStorage
+  let totalPages, currentClipboards, displayTotal
+
+  if (!isGuest && user) {
+    // Utilisateur connecté : pagination côté serveur
+    totalPages = Math.ceil(totalItems / itemsPerPage)
+    currentClipboards = filteredClipboards // L'API renvoie déjà la page demandée
+    displayTotal = totalItems
+  } else {
+    // Invité : pagination côté client
+    totalPages = Math.ceil(filteredClipboards.length / itemsPerPage)
+    const indexOfLastItem = currentPage * itemsPerPage
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage
+    currentClipboards = filteredClipboards.slice(indexOfFirstItem, indexOfLastItem)
+    displayTotal = filteredClipboards.length
+  }
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filterFavorites])
+
+  // Reload data when page changes for connected users
+  useEffect(() => {
+    if (!isGuest && user) {
+      loadClipboardHistory()
+    }
+  }, [currentPage])
+
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber)
+  }
+
   const handleExportTxt = () => {
     const content = clipboardTitle ? `${clipboardTitle}\n\n${clipboardText}` : clipboardText
     const blob = new Blob([content], { type: "text/plain" })
@@ -1245,7 +1289,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {filteredClipboards.map((clipboard) => (
+                    {currentClipboards.map((clipboard) => (
                       <div
                         key={clipboard.id}
                         className={`p-3 md:p-4 rounded-lg border ${clipboard.id === currentClipboardId ? "border-primary bg-primary/5" : "border-border bg-card"
@@ -1331,6 +1375,35 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {displayTotal > itemsPerPage && (
+                  <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Page {currentPage} sur {totalPages} ({displayTotal} élément{displayTotal > 1 ? 's' : ''})
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="hidden sm:inline ml-1">Précédent</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        <span className="hidden sm:inline mr-1">Suivant</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
