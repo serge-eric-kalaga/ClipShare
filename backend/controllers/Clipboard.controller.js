@@ -10,24 +10,20 @@ module.exports = {
                 return res.status(400).Response({ message: "Aucun fichier téléchargé !" });
             }
 
-            // vérifier la taille du fichier (max 15MB)
-            if (req.file.size > 15 * 1024 * 1024) {
-                return res.status(400).Response({ message: "La taille du fichier dépasse 15 Mo !" });
-            }
-
-            // Vérifier le type de fichier (autoriser uniquement certains types)
-            const allowedMimeTypes = ["image/png", "image/jpeg", "application/pdf", "text/plain"];
-            if (!allowedMimeTypes.includes(req.file.mimetype)) {
-                return res.status(400).Response({ message: "Type de fichier non autorisé !" });
-            }
+            const fileUrl = `/uploads/${req.file.filename}`;
 
             // si un clipboardId est fourni, on l'utilise
-            if (!req.query.clipboardId) {
-                // verifier si le clipboard existe
-                const clipboardId = req.query.clipboardId;
-                const clipboard = await Clipboard.findById(clipboardId);
+            if (req.query.clipboardId) {
+                const clipboard = await Clipboard.findById(req.query.clipboardId);
 
-                const fileUrl = `/uploads/${req.file.filename}`;
+                if (!clipboard) {
+                    return res.status(404).Response({ message: "Clipboard non trouvé !" });
+                }
+
+                // Vérifier les permissions
+                if (clipboard.owner && (!res.user || clipboard.owner.toString() !== res.user.id.toString())) {
+                    return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier ce clipboard !" });
+                }
 
                 // ajouter le fichier au presse-papiers
                 clipboard.files.push(fileUrl);
@@ -35,9 +31,11 @@ module.exports = {
 
                 return res.Response({ data: clipboard });
             }
+
+            // Sinon, créer un nouveau clipboard avec le fichier
             const newClipboard = new Clipboard({
-                owner: req.user ? req.user._id : null,
-                files: [`/uploads/${req.file.filename}`],
+                owner: res.user ? res.user.id : null,
+                files: [fileUrl],
             });
             const savedClipboard = await newClipboard.save();
             return res.Response({ data: savedClipboard });
@@ -59,7 +57,7 @@ module.exports = {
             }
 
             // Vérifier les permissions d'accès
-            if (entry.owner && (!req.user || entry.owner.toString() !== req.user._id.toString()) && entry.readOnly === true) {
+            if (entry.owner && (!res.user || entry.owner.toString() !== res.user.id.toString()) && entry.readOnly === true) {
                 return res.status(403).Response({ message: "Vous n'êtes pas autorisé à accéder à cette entrée du presse-papiers !" });
             }
 
@@ -71,10 +69,9 @@ module.exports = {
 
     // recupérer des presse-papiers avec pagination et filtrage
     async getClipboardEntries(req, res, next) {
+        // Parametres de pagination et de recherche : page, limit, search, user_id
+
         try {
-            if (!req.user) {
-                return res.status(401).Response({ message: "Utilisateur non authentifié !" });
-            }
 
             const { page = 1, limit = 10, search = "", user_id = "" } = req.query;
 
@@ -87,8 +84,11 @@ module.exports = {
 
             if (user_id) {
                 query.owner = user_id;
+
             } else {
-                query.$or.push({ owner: req.user._id }, { owner: null }, { readOnly: false });
+                console.log(res.user);
+
+                query.$or.push({ owner: res.user.id }, { owner: null }, { readOnly: false });
             }
 
             const totalEntries = await Clipboard.countDocuments(query);
@@ -116,7 +116,7 @@ module.exports = {
             }
 
             // Vérifier si l'utilisateur est le propriétaire
-            if (!req.user || entry.owner.toString() !== req.user._id.toString()) {
+            if (!res.user || entry.owner.toString() !== res.user.id.toString()) {
                 return res.status(403).Response({ message: "Vous n'êtes pas autorisé à supprimer cette entrée du presse-papiers !" });
             }
 
@@ -148,9 +148,18 @@ module.exports = {
     async clipboardEntry(req, res, next) {
         try {
 
+            // Remplacer les valeur vide par null
+            for (const key in req.body) {
+                if (req.body[key] === "") {
+                    req.body[key] = null
+                }
+            }
+            console.log(req.body);
+
             // Mise à jour, si un ID est fourni dans le corps de la requête
-            if (req.body?._id != null && req.body?._id !== undefined) {
-                console.log("-----test");
+            if (req.query?._id != null && req.body?._id !== undefined) {
+
+
 
                 const existingEntry = await Clipboard.findById(req.body._id);
 
@@ -158,8 +167,14 @@ module.exports = {
                 if (!existingEntry) {
                     return res.status(404).Response({ message: "Entrée du presse-papiers non trouvée !" });
                 }
-                // Vérifier le clipboard est ouverte à tous pour modification ou si l'utilisateur est le propriétaire
-                if (existingEntry.owner && (!req.user || existingEntry.owner.toString() !== req.user._id.toString()) || existingEntry.readOnly === false) {
+
+                // Vérifier si le clipboard est en lecture seule ET si l'utilisateur n'est pas le propriétaire
+                if (existingEntry.readOnly === true && existingEntry.owner && (!res.user || existingEntry.owner.toString() !== res.user.id.toString())) {
+                    return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier cette entrée du presse-papiers !" });
+                }
+
+                // Vérifier si le clipboard a un propriétaire ET l'utilisateur n'est pas le propriétaire
+                if (existingEntry.owner && (!res.user || existingEntry.owner.toString() !== res.user.id.toString())) {
                     return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier cette entrée du presse-papiers !" });
                 }
 
@@ -178,8 +193,8 @@ module.exports = {
             CreateClipboardModel.validateAsync(req.body).then(async (value) => {
 
                 const newEntry = new Clipboard({
-                    ...req.body,
-                    owner: req.user ? req.user?._id : null,
+                    ...value,
+                    owner: res.user ? res.user.id : null,
                 });
                 const savedEntry = await newEntry.save();
                 res.Response({ data: savedEntry });

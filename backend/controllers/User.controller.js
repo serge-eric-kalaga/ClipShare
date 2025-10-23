@@ -125,7 +125,7 @@ module.exports = {
                     role: user_exist.role,
                 },
                 process.env.JWTKey,
-                { expiresIn: '24h' }
+                { expiresIn: '30 days' }
             );
 
             // Format OAuth2

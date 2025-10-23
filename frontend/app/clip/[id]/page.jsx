@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Clipboard, Lock, Eye, AlertCircle, Users } from "lucide-react"
+import { encryptData, decryptData } from "@/hooks/functions"
 
 const generateRandomColor = () => {
   const colors = ["#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#06b6d4", "#6366f1", "#f97316"]
@@ -45,7 +46,7 @@ export default function ClipboardViewPage() {
     })
 
     const loadClipboard = () => {
-      const history = localStorage.getItem("clipboard_history")
+      const history = decryptData(localStorage.getItem("clipboard_history"))
       if (history) {
         const historyArray = JSON.parse(history)
         const foundClipboard = historyArray.find((item) => item.id === params.id)
@@ -83,7 +84,7 @@ export default function ClipboardViewPage() {
 
           const clipboardIndex = historyArray.findIndex((item) => item.id === params.id)
           historyArray[clipboardIndex] = foundClipboard
-          localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+          localStorage.setItem("clipboard_history", encryptData(JSON.stringify(historyArray)))
 
           setClipboardText(foundClipboard.text || "")
           setActiveViewers(foundClipboard.activeViewers || [])
@@ -92,7 +93,7 @@ export default function ClipboardViewPage() {
         }
       }
 
-      const savedClipboard = localStorage.getItem("current_clipboard")
+      const savedClipboard = decryptData(localStorage.getItem("current_clipboard"))
       if (savedClipboard) {
         const foundClipboard = JSON.parse(savedClipboard)
         if (foundClipboard.id === params.id) {
@@ -127,7 +128,7 @@ export default function ClipboardViewPage() {
             foundClipboard.activeViewers = foundClipboard.activeViewers.slice(-5)
           }
 
-          localStorage.setItem("current_clipboard", JSON.stringify(foundClipboard))
+          localStorage.setItem("current_clipboard", encryptData(JSON.stringify(foundClipboard)))
 
           setClipboardText(foundClipboard.text || "")
           setActiveViewers(foundClipboard.activeViewers || [])
@@ -139,7 +140,7 @@ export default function ClipboardViewPage() {
     loadClipboard()
 
     const interval = setInterval(() => {
-      const history = localStorage.getItem("clipboard_history")
+      const history = decryptData(localStorage.getItem("clipboard_history"))
       if (history) {
         const historyArray = JSON.parse(history)
         const foundClipboard = historyArray.find((item) => item.id === params.id)
@@ -151,7 +152,7 @@ export default function ClipboardViewPage() {
         }
       }
 
-      const savedClipboard = localStorage.getItem("current_clipboard")
+      const savedClipboard = decryptData(localStorage.getItem("current_clipboard"))
       if (savedClipboard) {
         const foundClipboard = JSON.parse(savedClipboard)
         if (foundClipboard.id === params.id && !isLocked && !isExpired) {
@@ -182,7 +183,7 @@ export default function ClipboardViewPage() {
     const newText = e.target.value
     setClipboardText(newText)
 
-    const history = localStorage.getItem("clipboard_history")
+    const history = decryptData(localStorage.getItem("clipboard_history"))
     if (history) {
       const historyArray = JSON.parse(history)
       const clipboardIndex = historyArray.findIndex((item) => item.id === params.id)
@@ -190,17 +191,17 @@ export default function ClipboardViewPage() {
       if (clipboardIndex !== -1) {
         historyArray[clipboardIndex].text = newText
         historyArray[clipboardIndex].updatedAt = new Date().toISOString()
-        localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+        localStorage.setItem("clipboard_history", encryptData(JSON.stringify(historyArray)))
       }
     }
 
-    const savedClipboard = localStorage.getItem("current_clipboard")
+    const savedClipboard = decryptData(localStorage.getItem("current_clipboard"))
     if (savedClipboard) {
       const clipboardData = JSON.parse(savedClipboard)
       if (clipboardData.id === params.id) {
         clipboardData.text = newText
         clipboardData.updatedAt = new Date().toISOString()
-        localStorage.setItem("current_clipboard", JSON.stringify(clipboardData))
+        localStorage.setItem("current_clipboard", encryptData(JSON.stringify(clipboardData)))
       }
     }
   }

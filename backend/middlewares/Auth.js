@@ -7,7 +7,8 @@ const LoginRequired = function (req, res, next) {
     ) {
         try {
             res.user = jwt.verify(req.headers.authorization.split(" ")[1], process.env.JWTKey)
-            // console.log(res.user);
+            console.log(res.user);
+
             next()
         } catch (error) {
             res.status(401).Response({ message: error.message })

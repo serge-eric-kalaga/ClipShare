@@ -1,16 +1,18 @@
 const express = require("express");
 const { addClipboardFile, getClipboardEntry, clipboardEntry, deleteClipboardEntry, getClipboardEntries } = require("../controllers/Clipboard.controller");
+const { IsAdmin, LoginRequired } = require("../middlewares/Auth");
+const { upload } = require("../middlewares/Upload");
 
 const clipboardRouter = express.Router();
 
-clipboardRouter.post("/", clipboardEntry);
+clipboardRouter.post("/", LoginRequired, clipboardEntry);
 
-clipboardRouter.post("/file", addClipboardFile);
+clipboardRouter.post("/file", LoginRequired, upload.single("file"), addClipboardFile);
 
-clipboardRouter.get("/:id", getClipboardEntry);
+clipboardRouter.get("/:id", LoginRequired, getClipboardEntry);
 
-clipboardRouter.get("/", getClipboardEntries);
+clipboardRouter.get("/", LoginRequired, getClipboardEntries);
 
-clipboardRouter.delete("/:id", deleteClipboardEntry);
+clipboardRouter.delete("/:id", LoginRequired, deleteClipboardEntry);
 
 module.exports = clipboardRouter;

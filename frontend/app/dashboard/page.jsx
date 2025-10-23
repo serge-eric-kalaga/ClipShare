@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,11 +45,13 @@ import {
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReactMarkdown from "react-markdown"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Alert, AlertDescription } from "@/components/ui/alert" // Imported Alert component
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { decryptData } from "@/hooks/functions"
+import axios from "axios"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -77,15 +79,39 @@ export default function DashboardPage() {
   const [clipboardReadOnly, setClipboardReadOnly] = useState(false)
   const [showStatsDialog, setShowStatsDialog] = useState(false) // Added state for statistics
 
+  // Ref pour le timer de debounce (auto-save après 2 secondes)
+  const saveTimerRef = useRef(null)
+
   useEffect(() => {
     const userData = localStorage.getItem("clipshare_user")
+    let currentUser = null
+    let guest = true
 
     if (userData) {
-      const decryptedData = decryptData(userData);
-      console.log(decryptedData);
-      setUser(JSON.parse(decryptedData))
-      setIsGuest(false)
-      setShowAuthNotification(false)
+      try {
+        const decryptedData = decryptData(userData)
+
+        // Vérifier si le déchiffrement a réussi
+        if (!decryptedData) {
+          console.warn('Failed to decrypt user data, clearing localStorage')
+          localStorage.removeItem("clipshare_user")
+          setIsGuest(true)
+          return
+        }
+
+        currentUser = JSON.parse(decryptedData)
+        setUser(currentUser)
+        console.log(currentUser)
+
+        guest = false
+        setIsGuest(false)
+        setShowAuthNotification(false)
+      } catch (error) {
+        console.error('Error loading user data:', error)
+        // Nettoyer les données corrompues
+        localStorage.removeItem("clipshare_user")
+        setIsGuest(true)
+      }
     } else {
       setIsGuest(true)
       // Check if user has dismissed the notification
@@ -95,7 +121,45 @@ export default function DashboardPage() {
       }
     }
 
-    loadClipboardHistory()
+    // Charger l'historique avec les valeurs locales (pas les états)
+    if (!guest && currentUser) {
+      // Utilisateur connecté : charger depuis l'API
+      axios
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, {
+          headers: { Authorization: `Bearer ${currentUser?.access_token}` },
+        })
+        .then((response) => {
+          const backendClipboards = response.data?.data || []
+          const mappedClipboards = backendClipboards.map((clip) => ({
+            id: clip._id,
+            url: `${window.location.origin}/clip/${clip._id}`,
+            text: clip.content || "",
+            title: clip.title || "Sans titre",
+            isFavorite: false,
+            password: clip.password || "",
+            expiration: clip.expireAt || null,
+            readOnly: clip.readOnly || false,
+            contentType: "text",
+            files: clip.files || [],
+            markdownMode: false,
+            createdAt: clip.createdAt,
+            updatedAt: clip.updatedAt,
+            views: clip.visits || 0,
+            lastViewed: null,
+            activeViewers: [],
+          }))
+          setClipboardHistory(mappedClipboards)
+        })
+        .catch((err) => {
+          console.error("Erreur chargement historique:", err)
+        })
+    } else {
+      // Invité : charger depuis localStorage
+      const history = localStorage.getItem("clipboard_history")
+      if (history) {
+        setClipboardHistory(JSON.parse(history))
+      }
+    }
 
     const savedClipboard = localStorage.getItem("current_clipboard")
     if (savedClipboard) {
@@ -110,94 +174,356 @@ export default function DashboardPage() {
       setContentType(clipboard.contentType || "text")
       setUploadedFiles(clipboard.files || [])
       setMarkdownMode(clipboard.markdownMode || false)
-    } else {
-      generateNewClipboard()
+    }
+    // NE PAS créer de clipboard automatiquement
+    // Il sera créé lors de la première saisie de texte
+
+    // Cleanup timer on unmount
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+      }
     }
   }, []) // Removed router from dependency array as it's stable
 
   const loadClipboardHistory = () => {
-    const history = localStorage.getItem("clipboard_history")
-    if (history) {
-      setClipboardHistory(JSON.parse(history))
+    // Charger l'historique selon le statut de l'utilisateur
+    if (!isGuest && user) {
+      axios
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, {
+          headers: { Authorization: `Bearer ${user?.access_token}` },
+        })
+        .then((response) => {
+          const backendClipboards = response.data?.data || []
+          // Mapper les champs backend vers frontend
+          const mappedClipboards = backendClipboards.map((clip) => ({
+            id: clip._id,
+            url: `${window.location.origin}/clip/${clip._id}`,
+            text: clip.content || "",
+            title: clip.title || "Sans titre",
+            isFavorite: false,
+            password: clip.password || "",
+            expiration: clip.expireAt || null,
+            readOnly: clip.readOnly || false,
+            contentType: "text",
+            files: clip.files || [],
+            markdownMode: false,
+            createdAt: clip.createdAt,
+            updatedAt: clip.updatedAt,
+            views: clip.visits || 0,
+            lastViewed: null,
+            activeViewers: [],
+          }))
+          setClipboardHistory(mappedClipboards)
+        })
+        .catch((err) => {
+          console.error("Erreur chargement historique:", err)
+        })
+    } else {
+      // Invité : charger depuis localStorage
+      const history = localStorage.getItem("clipboard_history")
+      if (history) {
+        setClipboardHistory(JSON.parse(history))
+      }
+    }
+  }
+
+  // Fonction pour sauvegarder automatiquement après 2 secondes de pause
+  const debouncedSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+    }
+
+    saveTimerRef.current = setTimeout(() => {
+      const savedClipboard = localStorage.getItem("current_clipboard")
+      if (savedClipboard) {
+        const clipboard = JSON.parse(savedClipboard)
+        saveToHistory(clipboard)
+      }
+    }, 2000)
+  }, [isGuest, user]) // Dépendances nécessaires pour saveToHistory
+
+  // Définies au niveau du composant pour être utilisables partout
+  const generateNewClipboard = () => {
+    if (!isGuest && user) {
+      // Utilisateur connecté : créer sur le backend SANS _id
+      const payload = {
+        title: "Sans titre",
+        content: "",
+        files: [],
+        password: null,
+        expireAt: null,
+        readOnly: false,
+      }
+
+      axios
+        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, {
+          headers: { Authorization: `Bearer ${user?.access_token}` },
+        })
+        .then((response) => {
+          const saved = response.data?.data || response.data
+          const id = saved?._id
+          const url = `${window.location.origin}/clip/${id}`
+
+          setClipboardUrl(url)
+          setClipboardText("")
+          setCurrentClipboardId(id)
+          setClipboardTitle("")
+          setClipboardPassword("")
+          setClipboardExpiration(null)
+          setClipboardReadOnly(false)
+          setContentType("text")
+          setUploadedFiles([])
+          setMarkdownMode(false)
+
+          const clipboard = {
+            id,
+            url,
+            text: "",
+            title: "Sans titre",
+            isFavorite: false,
+            password: "",
+            expiration: null,
+            readOnly: false,
+            contentType: "text",
+            files: [],
+            markdownMode: false,
+            createdAt: saved?.createdAt || new Date().toISOString(),
+            updatedAt: saved?.updatedAt || new Date().toISOString(),
+            views: saved?.visits || 0,
+            lastViewed: null,
+            activeViewers: [],
+          }
+
+          localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+          loadClipboardHistory()
+
+          toast({
+            title: "Nouveau clipboard créé",
+            description: "Sauvegardé sur le serveur",
+          })
+        })
+        .catch((err) => {
+          console.error("Erreur création clipboard:", err)
+          toast({
+            title: "Erreur",
+            description: err?.response?.data?.message || "Une erreur est survenue",
+            variant: "destructive",
+          })
+        })
+    } else {
+      // Invité : créer localement avec un ID temporaire
+      const id = `local_${Math.random().toString(36).substr(2, 9)}`
+      const url = `${window.location.origin}/clip/${id}`
+
+      setClipboardUrl(url)
+      setClipboardText("")
+      setCurrentClipboardId(id)
+      setClipboardTitle("")
+      setClipboardPassword("")
+      setClipboardExpiration(null)
+      setClipboardReadOnly(false)
+      setContentType("text")
+      setUploadedFiles([])
+      setMarkdownMode(false)
+
+      const clipboard = {
+        id,
+        url,
+        text: "",
+        title: "Sans titre",
+        isFavorite: false,
+        password: "",
+        expiration: null,
+        readOnly: false,
+        contentType: "text",
+        files: [],
+        markdownMode: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        views: 0,
+        lastViewed: null,
+        activeViewers: [],
+      }
+
+      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+
+      const history = localStorage.getItem("clipboard_history")
+      const historyArray = history ? JSON.parse(history) : []
+      historyArray.unshift(clipboard)
+      localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+      setClipboardHistory(historyArray)
+
+      toast({
+        title: "Nouveau clipboard créé",
+        description: "Connectez-vous pour sauvegarder en ligne",
+      })
     }
   }
 
   const saveToHistory = (clipboard) => {
-    const history = localStorage.getItem("clipboard_history")
-    const historyArray = history ? JSON.parse(history) : []
+    if (!isGuest && user) {
+      // Ne pas sauvegarder si l'ID est manquant ou invalide
+      if (!clipboard.id) {
+        console.warn("Cannot save clipboard without ID")
+        return
+      }
 
-    const existingIndex = historyArray.findIndex((item) => item.id === clipboard.id)
+      // Vérifier si c'est un clipboard local (créé par un invité ou avec préfixe local_)
+      // OU si l'ID n'est pas un ObjectId valide (pas 24 caractères hexadécimaux)
+      const isLocalClipboard = clipboard.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(clipboard.id)
 
-    if (existingIndex !== -1) {
-      historyArray[existingIndex] = clipboard
+      // Si c'est un clipboard local, créer un nouveau clipboard sur le backend
+      if (isLocalClipboard) {
+        const payload = {
+          title: clipboard.title || "Sans titre",
+          content: clipboard.text || "",
+          files: clipboard.files || [],
+          password: clipboard.password || null,
+          expireAt: clipboard.expiresAt || null,
+          readOnly: clipboard.readOnly || false,
+        }
+
+        // CRÉATION : pas d'_id du tout
+        const url = `${process.env.NEXT_PUBLIC_API_URL}/clipboards`
+
+        axios
+          .post(url, payload, {
+            headers: { Authorization: `Bearer ${user?.access_token}` },
+          })
+          .then((response) => {
+            const saved = response.data?.data || response.data
+
+            // Mettre à jour avec l'ID du backend
+            if (saved?._id) {
+              const newId = saved._id
+              const newUrl = `${window.location.origin}/clip/${newId}`
+
+              setCurrentClipboardId(newId)
+              setClipboardUrl(newUrl)
+
+              clipboard.id = newId
+              clipboard.url = newUrl
+              clipboard.createdAt = saved.createdAt
+              clipboard.updatedAt = saved.updatedAt
+
+              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+            }
+
+            loadClipboardHistory()
+          })
+          .catch((err) => {
+            console.error("Erreur création clipboard:", err)
+          })
+        return // Important: sortir ici pour ne pas continuer
+      }
+
+      // Utilisateur connecté avec un clipboard backend : MISE À JOUR uniquement
+      const payload = {
+        title: clipboard.title || "Sans titre",
+        content: clipboard.text || "",
+        files: clipboard.files || [],
+        password: clipboard.password || null,
+        expireAt: clipboard.expiresAt || null,
+        readOnly: clipboard.readOnly || false,
+        _id: clipboard.id,
+      }
+
+      // MISE À JOUR : _id en query parameter ET dans le body
+      const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${clipboard.id}`
+
+      axios
+        .post(updateUrl, payload, {
+          headers: { Authorization: `Bearer ${user?.access_token}` },
+        })
+        .then((response) => {
+          loadClipboardHistory()
+        })
+        .catch((err) => {
+          console.error("Erreur mise à jour clipboard:", err)
+        })
     } else {
-      historyArray.unshift(clipboard)
-    }
+      // Invité : sauvegarder uniquement en localStorage
+      const history = localStorage.getItem("clipboard_history")
+      const historyArray = history ? JSON.parse(history) : []
+      const existingIndex = historyArray.findIndex((item) => item.id === clipboard.id)
 
-    localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
-    setClipboardHistory(historyArray)
+      if (existingIndex !== -1) {
+        historyArray[existingIndex] = clipboard
+      } else {
+        historyArray.unshift(clipboard)
+      }
+
+      localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+      setClipboardHistory(historyArray)
+    }
   }
 
-  const generateNewClipboard = () => {
-    const id = Math.random().toString(36).substr(2, 9)
-    const url = `${window.location.origin}/clip/${id}`
 
-    setClipboardUrl(url)
-    setClipboardText("")
-    setCurrentClipboardId(id)
-    setClipboardTitle("")
-    setClipboardPassword("")
-    setClipboardExpiration("never")
-    setClipboardReadOnly(false)
-    setContentType("text")
-    setUploadedFiles([])
-    setMarkdownMode(false)
-
-    const clipboard = {
-      id,
-      url,
-      text: "",
-      title: "",
-      isFavorite: false,
-      password: "",
-      expiration: "never",
-      readOnly: false,
-      contentType: "text",
-      files: [],
-      markdownMode: false,
-      createdAt: new Date().toISOString(),
-      views: 0, // Added statistics tracking
-      lastViewed: null, // Added statistics tracking
-      activeViewers: [], // Added statistics tracking
-    }
-    localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-    saveToHistory(clipboard)
-
-    toast({
-      title: "Nouveau clipboard créé",
-      description: "Votre URL unique a été générée",
-    })
-  }
-
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
-    const filePromises = files.map((file) => {
-      return new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          resolve({
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: event.target.result,
-            uploadedAt: new Date().toISOString(),
+
+    if (!isGuest && user && currentClipboardId && !currentClipboardId.startsWith("local_")) {
+      // Utilisateur connecté avec clipboard backend : upload via API
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        try {
+          const response = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/clipboards/file?clipboardId=${currentClipboardId}`,
+            formData,
+            {
+              headers: {
+                Authorization: `Bearer ${user?.access_token}`,
+                "Content-Type": "multipart/form-data",
+              },
+            }
+          )
+
+          const updatedClipboard = response.data?.data
+          if (updatedClipboard) {
+            setUploadedFiles(updatedClipboard.files || [])
+
+            const clipboard = JSON.parse(localStorage.getItem("current_clipboard") || "{}")
+            clipboard.files = updatedClipboard.files
+            clipboard.updatedAt = updatedClipboard.updatedAt
+            localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+          }
+
+          toast({
+            title: "Fichier ajouté",
+            description: `${file.name} a été téléchargé`,
+          })
+        } catch (error) {
+          console.error("Erreur upload fichier:", error)
+          toast({
+            title: "Erreur",
+            description: `Impossible de télécharger ${file.name}`,
+            variant: "destructive",
           })
         }
-        reader.readAsDataURL(file)
+      }
+      loadClipboardHistory()
+    } else {
+      // Invité ou clipboard local : stockage en base64
+      const filePromises = files.map((file) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            resolve({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: event.target.result,
+              uploadedAt: new Date().toISOString(),
+            })
+          }
+          reader.readAsDataURL(file)
+        })
       })
-    })
 
-    Promise.all(filePromises).then((newFiles) => {
+      const newFiles = await Promise.all(filePromises)
       const updatedFiles = [...uploadedFiles, ...newFiles]
       setUploadedFiles(updatedFiles)
 
@@ -208,7 +534,9 @@ export default function DashboardPage() {
         clipboard.contentType = "mixed"
         clipboard.updatedAt = new Date().toISOString()
         localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-        saveToHistory(clipboard)
+
+        // Trigger auto-save
+        debouncedSave()
       }
 
       setContentType("mixed")
@@ -217,7 +545,7 @@ export default function DashboardPage() {
         title: "Fichiers ajoutés",
         description: `${newFiles.length} fichier(s) ajouté(s) avec succès`,
       })
-    })
+    }
   }
 
   const handleRemoveFile = (index) => {
@@ -231,7 +559,9 @@ export default function DashboardPage() {
       clipboard.contentType = updatedFiles.length > 0 ? "mixed" : "text"
       clipboard.updatedAt = new Date().toISOString()
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-      saveToHistory(clipboard)
+
+      // Trigger auto-save
+      debouncedSave()
     }
 
     if (updatedFiles.length === 0) {
@@ -250,10 +580,10 @@ export default function DashboardPage() {
       const clipboard = JSON.parse(savedClipboard)
       clipboard.password = clipboardPassword
       clipboard.expiration = clipboardExpiration
-      clipboard.readOnly = clipboardReadOnly // Corrected from clipboard.readOnly to clipboardReadOnly
+      clipboard.readOnly = clipboardReadOnly
       clipboard.updatedAt = new Date().toISOString()
 
-      if (clipboardExpiration !== "never") {
+      if (clipboardExpiration !== "never" && clipboardExpiration) {
         const now = new Date()
         const hours = Number.parseInt(clipboardExpiration)
         clipboard.expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString()
@@ -262,7 +592,9 @@ export default function DashboardPage() {
       }
 
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-      saveToHistory(clipboard)
+
+      // Trigger auto-save
+      debouncedSave()
     }
 
     setShowSecurityDialog(false)
@@ -282,7 +614,9 @@ export default function DashboardPage() {
       clipboard.title = newTitle
       clipboard.updatedAt = new Date().toISOString()
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-      saveToHistory(clipboard)
+
+      // AUTO-SAVE après 2 secondes
+      debouncedSave()
     }
   }
 
@@ -290,14 +624,96 @@ export default function DashboardPage() {
     const newText = e.target.value
     setClipboardText(newText)
 
-    const savedClipboard = localStorage.getItem("current_clipboard")
-    if (savedClipboard) {
-      const clipboard = JSON.parse(savedClipboard)
-      clipboard.text = newText
-      clipboard.markdownMode = markdownMode
-      clipboard.updatedAt = new Date().toISOString()
+    // Si pas de clipboard existant, en créer un d'abord
+    if (!currentClipboardId && !isGuest && user) {
+      // Utilisateur connecté : créer sur le backend
+      const payload = {
+        title: clipboardTitle || "Sans titre",
+        content: newText,
+        files: [],
+        password: null,
+        expireAt: null,
+        readOnly: false,
+      }
+
+      axios
+        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, {
+          headers: { Authorization: `Bearer ${user?.access_token}` },
+        })
+        .then((response) => {
+          const saved = response.data?.data || response.data
+          const id = saved?._id
+          const url = `${window.location.origin}/clip/${id}`
+
+          setClipboardUrl(url)
+          setCurrentClipboardId(id)
+
+          const clipboard = {
+            id,
+            url,
+            text: newText,
+            title: clipboardTitle || "Sans titre",
+            isFavorite: false,
+            password: "",
+            expiration: null,
+            readOnly: false,
+            contentType: "text",
+            files: [],
+            markdownMode: markdownMode,
+            createdAt: saved.createdAt || new Date().toISOString(),
+            updatedAt: saved.updatedAt || new Date().toISOString(),
+            views: 0,
+            lastViewed: null,
+            activeViewers: [],
+          }
+
+          localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+        })
+        .catch((err) => {
+          console.error("Erreur création clipboard:", err)
+        })
+    } else if (!currentClipboardId && isGuest) {
+      // Invité : créer localement (sans ajouter à l'historique tout de suite)
+      const id = `local_${Math.random().toString(36).substr(2, 9)}`
+      const url = `${window.location.origin}/clip/${id}`
+
+      setClipboardUrl(url)
+      setCurrentClipboardId(id)
+
+      const clipboard = {
+        id,
+        url,
+        text: newText,
+        title: clipboardTitle || "Sans titre",
+        isFavorite: false,
+        password: "",
+        expiration: null,
+        readOnly: false,
+        contentType: "text",
+        files: [],
+        markdownMode: markdownMode,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        views: 0,
+        lastViewed: null,
+        activeViewers: [],
+      }
+
+      // Sauvegarder uniquement le clipboard actuel, PAS dans l'historique
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-      saveToHistory(clipboard)
+    } else {
+      // Clipboard existe déjà : mise à jour localStorage et debounce
+      const savedClipboard = localStorage.getItem("current_clipboard")
+      if (savedClipboard) {
+        const clipboard = JSON.parse(savedClipboard)
+        clipboard.text = newText
+        clipboard.markdownMode = markdownMode
+        clipboard.updatedAt = new Date().toISOString()
+        localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+
+        // AUTO-SAVE après 2 secondes
+        debouncedSave()
+      }
     }
   }
 
@@ -418,7 +834,7 @@ export default function DashboardPage() {
     localStorage.removeItem("auth_notification_dismissed")
     toast({
       title: "Déconnexion réussie",
-      description: <span className="text-red-600">Vous êtes maintenant en mode invité</span>,
+      description: "Vous êtes maintenant en mode invité",
     })
   }
 
@@ -583,35 +999,29 @@ export default function DashboardPage() {
     }
   }
 
-  // Function to get clipboard stats - optimized with useMemo
+  // Function to get clipboard stats
   const getClipboardStats = (clipboardId) => {
-    if (!clipboardId) return null
+    // Vérifier que nous sommes côté client
+    if (typeof window === "undefined") {
+      return null
+    }
 
-    try {
-      const history = localStorage.getItem("clipboard_history")
-      if (history) {
-        const historyArray = JSON.parse(history)
-        const clipboard = historyArray.find((item) => item.id === clipboardId)
-        if (clipboard) {
-          return {
-            views: clipboard.views || 0,
-            lastViewed: clipboard.lastViewed,
-            activeViewers: clipboard.activeViewers || [],
-            createdAt: clipboard.createdAt,
-            updatedAt: clipboard.updatedAt,
-          }
+    const history = localStorage.getItem("clipboard_history")
+    if (history) {
+      const historyArray = JSON.parse(history)
+      const clipboard = historyArray.find((item) => item.id === clipboardId)
+      if (clipboard) {
+        return {
+          views: clipboard.views || 0,
+          lastViewed: clipboard.lastViewed,
+          activeViewers: clipboard.activeViewers || [],
+          createdAt: clipboard.createdAt,
+          updatedAt: clipboard.updatedAt,
         }
       }
-    } catch (error) {
-      console.error("Error reading clipboard stats:", error)
     }
     return null
   }
-
-  // Memoize current clipboard stats to avoid multiple localStorage reads
-  const currentStats = useMemo(() => {
-    return getClipboardStats(currentClipboardId)
-  }, [currentClipboardId, clipboardHistory])
 
   // Removed the check for !user here as we now handle guest users
   // if (!user) {
@@ -629,7 +1039,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold">ClipShare</h1>
-                <p className={`text-xs text-muted-foreground hidden sm:block ${isGuest ? "italic text-red-600" : ""}`}>
+                <p className="text-xs text-muted-foreground hidden sm:block">
                   {isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}
                 </p>
               </div>
@@ -667,7 +1077,7 @@ export default function DashboardPage() {
                 <SheetContent side="right">
                   <SheetHeader>
                     <SheetTitle>Menu</SheetTitle>
-                    <SheetDescription>{isGuest ? "Mode invité" : `Bienvenue, ${user.name}`}</SheetDescription>
+                    <SheetDescription>{isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}</SheetDescription>
                   </SheetHeader>
                   <div className="flex flex-col gap-2 mt-6">
                     <Button
@@ -720,7 +1130,7 @@ export default function DashboardPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <p className="text-sm font-medium mb-1 text-red-600">Mode invité</p>
+                <p className="text-sm font-medium mb-1">Mode invité</p>
                 <p className="text-xs text-muted-foreground">
                   Vos données sont stockées localement. Connectez-vous pour sauvegarder vos clipboards de manière
                   permanente.
@@ -1098,27 +1508,40 @@ export default function DashboardPage() {
                         <div className="space-y-2">
                           <Label className="text-sm">Fichiers téléchargés</Label>
                           <div className="space-y-2">
-                            {uploadedFiles.map((file, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between p-3 border rounded-lg bg-card"
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  {file.type.startsWith("image/") ? (
-                                    <ImageIcon className="h-5 w-5 text-muted-foreground shrink-0" />
-                                  ) : (
-                                    <File className="h-5 w-5 text-muted-foreground shrink-0" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{file.name}</p>
-                                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                            {uploadedFiles.map((file, index) => {
+                              // Gérer les deux formats : objet (local) ou string (backend)
+                              const isFileObject = typeof file === "object" && file !== null
+                              const fileName = isFileObject ? file.name : file.split("/").pop()
+                              const fileType = isFileObject ? file.type : ""
+                              const fileSize = isFileObject ? file.size : 0
+                              const isImage = isFileObject
+                                ? fileType.startsWith("image/")
+                                : /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName)
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    {isImage ? (
+                                      <ImageIcon className="h-5 w-5 text-muted-foreground shrink-0" />
+                                    ) : (
+                                      <File className="h-5 w-5 text-muted-foreground shrink-0" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{fileName}</p>
+                                      {fileSize > 0 && (
+                                        <p className="text-xs text-muted-foreground">{formatFileSize(fileSize)}</p>
+                                      )}
+                                    </div>
                                   </div>
+                                  <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(index)}>
+                                    <X className="h-4 w-4" />
+                                  </Button>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => handleRemoveFile(index)}>
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         </div>
                       )}
@@ -1141,6 +1564,20 @@ export default function DashboardPage() {
                           Lecture seule
                         </span>
                       )}
+                      {/* Expiration */}
+                      <div>
+                        {clipboardExpiration === "never" ? (
+                          <span className="flex items-center gap-1">
+                            <Infinity className="h-3 w-3" />
+                            Jamais expiré
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Expire dans {clipboardExpiration} heure(s)
+                          </span>
+                        )}
+                      </div>
                       <span className="flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
                         Sync temps réel
@@ -1188,24 +1625,25 @@ export default function DashboardPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Vues totales</span>
-                      <span className="text-2xl font-bold">{currentStats?.views || 0}</span>
+                      <span className="text-2xl font-bold">{getClipboardStats(currentClipboardId)?.views || 0}</span>
                     </div>
-                    {currentStats?.lastViewed && (
+                    {getClipboardStats(currentClipboardId)?.lastViewed && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Dernière vue</span>
-                        <span className="text-xs">{formatDate(currentStats.lastViewed)}</span>
+                        <span className="text-xs">{formatDate(getClipboardStats(currentClipboardId).lastViewed)}</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Créé le</span>
                       <span className="text-xs">
-                        {currentStats?.createdAt && formatDate(currentStats.createdAt)}
+                        {getClipboardStats(currentClipboardId)?.createdAt &&
+                          formatDate(getClipboardStats(currentClipboardId).createdAt)}
                       </span>
                     </div>
-                    {currentStats?.updatedAt && (
+                    {getClipboardStats(currentClipboardId)?.updatedAt && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Modifié le</span>
-                        <span className="text-xs">{formatDate(currentStats.updatedAt)}</span>
+                        <span className="text-xs">{formatDate(getClipboardStats(currentClipboardId).updatedAt)}</span>
                       </div>
                     )}
                   </div>
@@ -1213,12 +1651,12 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-muted-foreground">Viewers actifs</span>
                       <span className="text-sm font-semibold">
-                        {currentStats?.activeViewers?.length || 0}
+                        {getClipboardStats(currentClipboardId)?.activeViewers?.length || 0}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {currentStats?.activeViewers?.length > 0 ? (
-                        currentStats.activeViewers.map((viewer, index) => (
+                      {getClipboardStats(currentClipboardId)?.activeViewers?.length > 0 ? (
+                        getClipboardStats(currentClipboardId).activeViewers.map((viewer, index) => (
                           <div
                             key={index}
                             className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold"

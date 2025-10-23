@@ -47,7 +47,7 @@ export default function LoginPage() {
         console.log(err);
 
         toast({
-          title: "Erreur lors de la connexion",
+          title: <span className="text-red-500">Erreur lors de la connexion</span>,
           description: err.response?.data?.message || "Une erreur est survenue. Veuillez réessayer.",
         })
         setLoading(false)
