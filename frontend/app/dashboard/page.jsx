@@ -102,7 +102,6 @@ export default function DashboardPage() {
 
         currentUser = JSON.parse(decryptedData)
         setUser(currentUser)
-        console.log(currentUser)
 
         guest = false
         setIsGuest(false)

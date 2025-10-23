@@ -153,7 +153,6 @@ export default function ClipboardViewPage() {
           return
         } catch (apiError) {
           // Si l'API échoue, essayer localStorage
-          console.log("API error, trying localStorage:", apiError.message)
         }
         const loadFromLocalStorage = () => {
           const history = localStorage.getItem("clipboard_history")

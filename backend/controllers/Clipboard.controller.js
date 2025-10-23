@@ -103,8 +103,6 @@ module.exports = {
                 query.owner = user_id;
 
             } else {
-                console.log(res.user);
-
                 query.$or.push({ owner: res.user.id }, { owner: null }, { readOnly: false });
             }
 
@@ -171,7 +169,6 @@ module.exports = {
                     req.body[key] = null
                 }
             }
-            console.log(req.body);
 
             // Mise à jour, si un ID est fourni dans le corps de la requête
             if (req.query?._id != null && req.body?._id !== undefined) {

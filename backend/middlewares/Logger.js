@@ -61,7 +61,6 @@ const loggerMiddleware = (req, res, next) => {
       }
 
     }
-    // console.log(logString);
   };
 
   next();

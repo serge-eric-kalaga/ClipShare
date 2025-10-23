@@ -51,8 +51,6 @@ export default function SignupPage() {
 
         })
         .catch((err) => {
-          console.log(err);
-
           toast({
             title: "Erreur lors de la création du compte",
             description: err.response?.data?.message || "Une erreur est survenue. Veuillez réessayer.",
