@@ -221,6 +221,39 @@ module.exports = {
         }
     },
 
+    // Vérifier quels clipboards peuvent être synchronisés
+    async checkSyncableClipboards(req, res, next) {
+        try {
+            const { clipboardIds } = req.body;
+
+            if (!Array.isArray(clipboardIds)) {
+                return res.status(400).Response({ message: "Données invalides !" });
+            }
+
+            const syncable = [];
+
+            for (const clipboardId of clipboardIds) {
+                const clipboard = await Clipboard.findById(clipboardId);
+
+                if (!clipboard) continue;
+                if (clipboard.owner) continue; // Déjà synchronisé
+
+                // Vérifier que le clipboard n'est pas vide
+                const hasContent = clipboard.content && clipboard.content.trim().length > 0;
+                const hasFiles = clipboard.files && clipboard.files.length > 0;
+                const hasTitle = clipboard.title && clipboard.title.trim().length > 0 && clipboard.title !== "Sans titre";
+
+                if (hasContent || hasFiles || hasTitle) {
+                    syncable.push(clipboardId);
+                }
+            }
+
+            res.Response({ data: syncable });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     async synchLocalClipboard(req, res, next) {
         // Etant donne que la donnee est deja sur le serveur, on n'a qu'a mettre a jour en mettant le owner
         try {
@@ -230,13 +263,45 @@ module.exports = {
                 return res.status(400).Response({ message: "Données de presse-papiers invalides !" });
             }
 
+            let syncCount = 0;
+            let skippedCount = 0;
+
             for (const clipboardId of clipboardIds) {
+                // Vérifier que le clipboard existe
+                const clipboard = await Clipboard.findById(clipboardId);
+
+                if (!clipboard) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Vérifier que le clipboard n'a pas déjà un owner
+                if (clipboard.owner) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Vérifier que le clipboard n'est pas vide
+                const hasContent = clipboard.content && clipboard.content.trim().length > 0;
+                const hasFiles = clipboard.files && clipboard.files.length > 0;
+                const hasTitle = clipboard.title && clipboard.title.trim().length > 0 && clipboard.title !== "Sans titre";
+
+                if (!hasContent && !hasFiles && !hasTitle) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Tout est bon, on peut synchroniser
                 await Clipboard.findByIdAndUpdate(clipboardId, {
                     owner: res.user ? res.user.id : null,
                 });
+                syncCount++;
             }
 
-            res.Response({ message: "Presse-papiers synchronisés avec succès !" });
+            res.Response({
+                message: `${syncCount} presse-papiers synchronisé(s) avec succès !${skippedCount > 0 ? ` (${skippedCount} ignoré(s))` : ''}`,
+                data: { synced: syncCount, skipped: skippedCount }
+            });
         } catch (error) {
             next(error);
         }

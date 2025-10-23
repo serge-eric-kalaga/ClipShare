@@ -26,27 +26,71 @@ export default function SyncPage() {
             return
         }
 
-        try {
-            const decryptedData = decryptData(userData)
-            if (!decryptedData) {
-                router.push("/login")
-                return
-            }
-            const currentUser = JSON.parse(decryptedData)
-            setUser(currentUser)
+        const loadClipboards = async () => {
+            try {
+                const decryptedData = decryptData(userData)
+                if (!decryptedData) {
+                    router.push("/login")
+                    return
+                }
+                const currentUser = JSON.parse(decryptedData)
+                setUser(currentUser)
 
-            // Charger les clipboards locaux
-            const history = localStorage.getItem("clipboard_history")
-            if (history) {
-                const clipboards = JSON.parse(history)
-                // Filtrer seulement les clipboards qui ont un ID valide (pas local_)
-                const validClipboards = clipboards.filter(clip => clip.id && !clip.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clip.id))
-                setLocalClipboards(validClipboards)
+                // Charger les clipboards locaux
+                const history = localStorage.getItem("clipboard_history")
+                if (history) {
+                    const clipboards = JSON.parse(history)
+                    console.log("📋 Clipboards locaux:", clipboards)
+
+                    // Filtrer pour ne garder que les IDs valides
+                    const clipboardIds = clipboards
+                        .filter(clip => clip.id && !clip.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clip.id))
+                        .map(clip => clip.id)
+
+                    console.log("🔍 IDs à vérifier:", clipboardIds)
+
+                    if (clipboardIds.length === 0) {
+                        console.log("➡️ Aucun ID valide, redirection vers dashboard")
+                        router.push("/dashboard")
+                        return
+                    }
+
+                    // Demander au serveur quels clipboards peuvent être synchronisés
+                    try {
+                        const response = await axios.post(
+                            `${process.env.NEXT_PUBLIC_API_URL}/clipboards/sync/check`,
+                            { clipboardIds },
+                            {
+                                headers: { Authorization: `Bearer ${currentUser?.access_token}` },
+                            }
+                        )
+                        const syncableIds = response.data?.data || []
+                        console.log("✅ Clipboards synchronisables:", syncableIds)
+
+                        // Filtrer les clipboards locaux pour ne garder que ceux qui sont synchronisables
+                        const validClipboards = clipboards.filter(clip => syncableIds.includes(clip.id))
+
+                        console.log("📊 Clipboards à afficher:", validClipboards)
+                        setLocalClipboards(validClipboards)
+
+                        // Si aucun clipboard à synchroniser, rediriger vers le dashboard
+                        if (validClipboards.length === 0) {
+                            console.log("➡️ Aucun clipboard à synchroniser, redirection vers dashboard")
+                            router.push("/dashboard")
+                        }
+                    } catch (error) {
+                        console.error("❌ Erreur vérification clipboards:", error)
+                        // En cas d'erreur, rediriger vers le dashboard
+                        router.push("/dashboard")
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading user data:", error)
+                router.push("/login")
             }
-        } catch (error) {
-            console.error("Error loading user data:", error)
-            router.push("/login")
         }
+
+        loadClipboards()
     }, [router])
 
     const handleSync = async () => {

@@ -28,7 +28,7 @@ export default function LoginPage() {
       username: email,
       password: password,
     })
-      .then((response) => {
+      .then(async (response) => {
         const user = response?.data?.data;
         const userData = JSON.stringify(user);
 
@@ -40,17 +40,28 @@ export default function LoginPage() {
           description: "Bienvenue sur ClipShare !",
         })
 
-        // Vérifier s'il y a des clipboards locaux à synchroniser
+        // Vérifier si on a des clipboards locaux potentiellement synchronisables
         const history = localStorage.getItem("clipboard_history")
         if (history) {
           const clipboards = JSON.parse(history)
-          const hasLocalClipboards = clipboards.some(clip => clip.id && !clip.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clip.id))
+          // Si on a au moins un clipboard avec un ID valide, aller sur /sync
+          // La page /sync fera la vérification détaillée avec le backend
+          const hasValidIds = clipboards.some(clip =>
+            clip.id && !clip.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clip.id)
+          )
 
-          if (hasLocalClipboards) {
+          if (hasValidIds) {
             router.push("/sync")
-          } else {
-            router.push("/dashboard")
+            return
           }
+        }
+
+        router.push("/dashboard")
+
+        // Rediriger vers /sync s'il y a potentiellement des clipboards à synchroniser
+        // La page /sync fera la vérification complète avec le serveur
+        if (hasLocalClipboards) {
+          router.push("/sync")
         } else {
           router.push("/dashboard")
         }

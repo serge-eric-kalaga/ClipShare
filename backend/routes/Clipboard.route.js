@@ -1,5 +1,5 @@
 const express = require("express");
-const { addClipboardFile, getClipboardEntry, clipboardEntry, deleteClipboardEntry, getClipboardEntries, toggleFavorite, synchLocalClipboard } = require("../controllers/Clipboard.controller");
+const { addClipboardFile, getClipboardEntry, clipboardEntry, deleteClipboardEntry, getClipboardEntries, toggleFavorite, synchLocalClipboard, checkSyncableClipboards } = require("../controllers/Clipboard.controller");
 const { IsAdmin, LoginRequired, OptionalAuth } = require("../middlewares/Auth");
 const { upload } = require("../middlewares/Upload");
 
@@ -11,6 +11,9 @@ clipboardRouter.post("/file", OptionalAuth, upload.single("file"), addClipboardF
 
 // Route publique pour voir un clipboard partagé (sans authentification requise)
 clipboardRouter.get("/share/:id", getClipboardEntry);
+
+// Vérifier quels clipboards peuvent être synchronisés
+clipboardRouter.post("/sync/check", LoginRequired, checkSyncableClipboards);
 
 // Synchroniser le presse-papiers local avec le serveur
 clipboardRouter.post("/sync", LoginRequired, synchLocalClipboard);
