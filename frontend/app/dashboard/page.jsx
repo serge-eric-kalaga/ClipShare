@@ -865,6 +865,15 @@ export default function DashboardPage() {
     setIsGuest(true)
     setShowAuthNotification(true)
     localStorage.removeItem("auth_notification_dismissed")
+
+    // Recharger l'historique depuis localStorage (données locales)
+    const history = localStorage.getItem("clipboard_history")
+    if (history) {
+      setClipboardHistory(JSON.parse(history))
+    } else {
+      setClipboardHistory([])
+    }
+
     toast({
       title: "Déconnexion réussie",
       description: "Vous êtes maintenant en mode invité",
