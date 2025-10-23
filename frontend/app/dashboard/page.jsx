@@ -876,7 +876,7 @@ export default function DashboardPage() {
 
     toast({
       title: "Déconnexion réussie",
-      description: "Vous êtes maintenant en mode invité",
+      description: <span className="text-muted-foreground text-red-600">Vous êtes maintenant en mode invité</span>,
     })
   }
 
@@ -1081,7 +1081,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold">ClipShare</h1>
-                <p className="text-xs text-muted-foreground hidden sm:block">
+                <p className={"text-xs text-muted-foreground hidden sm:block" + (isGuest ? " text-red-600" : "")}>
                   {isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}
                 </p>
               </div>
@@ -1119,7 +1119,7 @@ export default function DashboardPage() {
                 <SheetContent side="right">
                   <SheetHeader>
                     <SheetTitle>Menu</SheetTitle>
-                    <SheetDescription>{isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}</SheetDescription>
+                    <SheetDescription className={isGuest ? "text-red-600" : ""}>{isGuest ? "Mode invité" : `Bienvenue, ${user.username.split("@")[0]}`}</SheetDescription>
                   </SheetHeader>
                   <div className="flex flex-col gap-2 mt-6">
                     <Button
@@ -1172,7 +1172,7 @@ export default function DashboardPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <p className="text-sm font-medium mb-1">Mode invité</p>
+                <p className={"text-sm font-medium mb-1" + (isGuest ? " text-red-600" : "")}>Mode invité</p>
                 <p className="text-xs text-muted-foreground">
                   Vos données sont stockées localement. Connectez-vous pour sauvegarder vos clipboards de manière
                   permanente.
