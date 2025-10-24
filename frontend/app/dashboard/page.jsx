@@ -420,10 +420,12 @@ export default function DashboardPage() {
       })
 
       socketRef.current.on('clipboard:viewers', (data) => {
+        console.log('[Dashboard clipboard:viewers] Received data:', data)
         const { clipboardId, active, totalViews } = data || {}
         setClipboardHistory((prev) =>
           prev.map((c) => {
             if (c.id === clipboardId) {
+              console.log('[Dashboard clipboard:viewers] Updating clipboard:', clipboardId, 'active:', active)
               return {
                 ...c,
                 views: totalViews != null ? totalViews : c.views,

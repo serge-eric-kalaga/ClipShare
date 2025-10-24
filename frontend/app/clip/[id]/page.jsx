@@ -539,8 +539,10 @@ export default function ClipboardViewPage() {
 
       // Écouter les viewers actifs
       socketRef.current.on('clipboard:viewers', (data) => {
+        console.log('[clipboard:viewers] Received data:', data)
         const { clipboardId, active, totalViews: views } = data || {}
         if (clipboardId === params.id) {
+          console.log('[clipboard:viewers] Updating active viewers:', active)
           setActiveViewers(
             Array.from({ length: active || 0 }).map((_, i) => ({
               name: `Viewer ${i + 1}`,
