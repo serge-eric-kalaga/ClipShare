@@ -37,6 +37,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import QRCodeDisplay from "@/components/qr-code-display"
+import RichTextEditor from "@/components/rich-text-editor"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Dialog,
@@ -74,6 +75,7 @@ export default function DashboardPage() {
   const [contentType, setContentType] = useState("text")
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [markdownMode, setMarkdownMode] = useState(false)
+  const [editorMode, setEditorMode] = useState("rich") // "rich", "markdown", "plain"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isSynch, setIsSynch] = useState(true)
   const [clipboardCreatedAt, setClipboardCreatedAt] = useState("")
@@ -1616,24 +1618,98 @@ export default function DashboardPage() {
                         <Label className="text-sm text-muted-foreground">Mode d'édition</Label>
                         <div className="flex items-center gap-2">
                           <Button
-                            variant={!markdownMode ? "default" : "outline"}
+                            variant={editorMode === "rich" ? "default" : "outline"}
                             size="sm"
-                            onClick={() => setMarkdownMode(false)}
+                            onClick={() => setEditorMode("rich")}
                             className="flex-1 sm:flex-none text-xs sm:text-sm"
                           >
-                            Texte brut
+                            Éditeur riche
                           </Button>
                           <Button
-                            variant={markdownMode ? "default" : "outline"}
+                            variant={editorMode === "markdown" ? "default" : "outline"}
                             size="sm"
-                            onClick={() => setMarkdownMode(true)}
+                            onClick={() => setEditorMode("markdown")}
                             className="flex-1 sm:flex-none text-xs sm:text-sm"
                           >
                             Markdown
                           </Button>
+                          <Button
+                            variant={editorMode === "plain" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setEditorMode("plain")}
+                            className="flex-1 sm:flex-none text-xs sm:text-sm"
+                          >
+                            Texte brut
+                          </Button>
                         </div>
                       </div>
-                      {markdownMode ? (
+                      {editorMode === "rich" ? (
+                        <RichTextEditor
+                          content={clipboardText}
+                          onChange={(html) => {
+                            setClipboardText(html)
+                            const savedClipboard = localStorage.getItem("current_clipboard")
+                            if (savedClipboard) {
+                              const clipboard = JSON.parse(savedClipboard)
+                              clipboard.text = html
+                              const newUpdatedAt = new Date().toISOString()
+                              clipboard.updatedAt = newUpdatedAt
+                              setClipboardUpdatedAt(newUpdatedAt)
+                              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+                              debouncedSave()
+                            } else if (!currentClipboardId) {
+                              // Créer un nouveau clipboard si nécessaire
+                              const payload = {
+                                title: clipboardTitle || "Sans titre",
+                                content: html,
+                                files: [],
+                                password: null,
+                                expireAt: null,
+                                readOnly: false,
+                              }
+                              const config = user ? {
+                                headers: { Authorization: `Bearer ${user?.access_token}` },
+                              } : {}
+                              axios
+                                .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, config)
+                                .then((response) => {
+                                  const saved = response.data?.data || response.data
+                                  const id = saved?._id
+                                  const url = `${window.location.origin}/clip/${id}`
+                                  const createdAt = saved.createdAt || new Date().toISOString()
+                                  const updatedAt = saved.updatedAt || new Date().toISOString()
+                                  setClipboardUrl(url)
+                                  setCurrentClipboardId(id)
+                                  setClipboardCreatedAt(createdAt)
+                                  setClipboardUpdatedAt(updatedAt)
+                                  const clipboard = {
+                                    id,
+                                    url,
+                                    text: html,
+                                    title: clipboardTitle || "Sans titre",
+                                    isFavorite: false,
+                                    password: "",
+                                    expiration: null,
+                                    readOnly: false,
+                                    contentType: "text",
+                                    files: [],
+                                    markdownMode: false,
+                                    createdAt: createdAt,
+                                    updatedAt: updatedAt,
+                                    views: 0,
+                                    lastViewed: null,
+                                    activeViewers: [],
+                                  }
+                                  localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+                                })
+                                .catch((err) => {
+                                  console.error("Erreur création clipboard:", err)
+                                })
+                            }
+                          }}
+                          placeholder="Commencez à taper ou collez votre texte ici..."
+                        />
+                      ) : editorMode === "markdown" ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           <div>
                             <Label className="text-xs text-muted-foreground mb-2 block">Éditeur</Label>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import '@/styles/editor.css'
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,10 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clipboard, Lock, Eye, AlertCircle, Users, Download, FileText, File as FileIcon, Image as ImageIcon, Clock, Shield, LogIn, Copy, Check, ChevronDown } from "lucide-react"
+import { Clipboard, Lock, Eye, AlertCircle, Users, Download, FileText, File as FileIcon, Image as ImageIcon, Clock, Shield, LogIn, Copy, Check, ChevronDown, Upload, Trash2, X } from "lucide-react"
 import { encryptData, decryptData } from "@/hooks/functions"
 import { useToast } from "@/hooks/use-toast"
 import ReactMarkdown from "react-markdown"
+import RichTextEditor from "@/components/rich-text-editor"
 import axios from "axios"
 
 const generateRandomColor = () => {
@@ -43,8 +45,183 @@ export default function ClipboardViewPage() {
   const [activeViewers, setActiveViewers] = useState([])
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [markdownMode, setMarkdownMode] = useState(false)
+  const [editorMode, setEditorMode] = useState("rich") // "rich", "markdown", "plain"
   const [copied, setCopied] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  const [isSynch, setIsSynch] = useState(true)
+
+  // Ref pour le timer de debounce (auto-save après 2 secondes)
+  const saveTimerRef = useRef(null)
+
+  // Fonction de sauvegarde avec debounce
+  const debouncedSave = useCallback(async (newText) => {
+    // Passer en mode "non synchronisé"
+    setIsSynch(false)
+
+    // Annuler le timer précédent s'il existe
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+    }
+
+    // Créer un nouveau timer de 2 secondes
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        // Si c'est un clipboard local ou sans ID valide, ne pas envoyer au serveur
+        if (!params.id || params.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(params.id)) {
+          setIsSynch(true)
+          return
+        }
+
+        // Préparer le payload avec tous les champs
+        const savedClipboard = localStorage.getItem("current_clipboard")
+        let payload = {
+          content: newText,
+        }
+
+        if (savedClipboard) {
+          const clipboard = JSON.parse(savedClipboard)
+          payload = {
+            title: clipboard.title || "Sans titre",
+            content: newText,
+            files: clipboard.files || [],
+            password: clipboard.password || null,
+            expireAt: clipboard.expiresAt || null,
+            readOnly: clipboard.readOnly || false,
+            _id: params.id,
+          }
+        }
+
+        // MISE À JOUR : _id en query parameter ET dans le body (comme dans le dashboard)
+        const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${params.id}`
+        const config = {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+
+        // Ajouter l'authentification si l'utilisateur est connecté
+        if (user) {
+          config.headers.Authorization = `Bearer ${user?.access_token}`
+        }
+
+        const response = await axios.post(updateUrl, payload, config)
+
+        // Mettre à jour également le localStorage
+        if (savedClipboard) {
+          const clipboard = JSON.parse(savedClipboard)
+          clipboard.text = newText
+          clipboard.updatedAt = new Date().toISOString()
+          localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+        }
+
+        // Repasser en mode "synchronisé"
+        setIsSynch(true)
+      } catch (error) {
+        console.error("Erreur sauvegarde:", error)
+        // Rester en mode "non synchronisé" en cas d'erreur
+        toast({
+          title: "Erreur de synchronisation",
+          description: "Impossible de sauvegarder sur le serveur",
+          variant: "destructive",
+        })
+      }
+    }, 2000)
+  }, [params.id, user, toast])
+
+  // Fonction de téléchargement de fichiers
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    // Si on a un clipboard avec ID valide (pas local_), utiliser l'API de upload
+    if (params.id && !params.id.startsWith("local_") && /^[a-f0-9]{24}$/i.test(params.id)) {
+      // Upload via API (avec ou sans authentification)
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        try {
+          const config = {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+
+          // Ajouter l'authentification si l'utilisateur est connecté
+          if (user) {
+            config.headers.Authorization = `Bearer ${user?.access_token}`
+          }
+
+          const response = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/clipboards/file?clipboardId=${params.id}`,
+            formData,
+            config
+          )
+
+          const updatedClipboard = response.data?.data
+          if (updatedClipboard) {
+            setUploadedFiles(updatedClipboard.files || [])
+
+            const savedClipboard = localStorage.getItem("current_clipboard")
+            if (savedClipboard) {
+              const clipboard = JSON.parse(savedClipboard)
+              clipboard.files = updatedClipboard.files
+              clipboard.updatedAt = updatedClipboard.updatedAt
+              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+            }
+          }
+
+          toast({
+            title: "Fichier ajouté",
+            description: `${file.name} a été téléchargé`,
+          })
+        } catch (error) {
+          console.error("Erreur upload fichier:", error)
+          toast({
+            title: "Erreur",
+            description: error.response?.data?.message || `Impossible de télécharger ${file.name}`,
+            variant: "destructive",
+          })
+        }
+      }
+    } else {
+      // Pas encore de clipboard ou clipboard local : créer d'abord un clipboard
+      toast({
+        title: "Information",
+        description: "Veuillez d'abord créer un clipboard avant d'ajouter des fichiers",
+        variant: "default",
+      })
+    }
+  }
+
+  // Fonction de suppression de fichier
+  const handleRemoveFile = (index) => {
+    const updatedFiles = uploadedFiles.filter((_, i) => i !== index)
+    setUploadedFiles(updatedFiles)
+
+    const savedClipboard = localStorage.getItem("current_clipboard")
+    if (savedClipboard) {
+      const clipboard = JSON.parse(savedClipboard)
+      clipboard.files = updatedFiles
+      clipboard.updatedAt = new Date().toISOString()
+      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+
+      // Trigger auto-save avec debouncedSave
+      debouncedSave(clipboardText)
+    }
+
+    toast({
+      title: "Fichier supprimé",
+      description: "Le fichier a été retiré du clipboard",
+    })
+  }
+
+  // Fonction pour détecter si une chaîne contient du HTML
+  const isHTML = (str) => {
+    if (!str) return false
+    const htmlRegex = /<\/?[a-z][\s\S]*>/i
+    return htmlRegex.test(str)
+  }
 
   // Charger l'utilisateur depuis localStorage
   useEffect(() => {
@@ -61,20 +238,14 @@ export default function ClipboardViewPage() {
     }
   }, [])
 
-  // Charger l'utilisateur depuis localStorage
+  // Détecter automatiquement le mode d'édition en fonction du contenu
   useEffect(() => {
-    const userData = localStorage.getItem("clipshare_user")
-    if (userData) {
-      try {
-        const decryptedData = decryptData(userData)
-        if (decryptedData) {
-          setUser(JSON.parse(decryptedData))
-        }
-      } catch (error) {
-        console.error('Erreur chargement utilisateur:', error)
+    if (clipboardText) {
+      if (isHTML(clipboardText)) {
+        setEditorMode("rich")
       }
     }
-  }, [])
+  }, [clipboardText])
 
   // Charger le clipboard depuis l'API backend
   useEffect(() => {
@@ -302,7 +473,15 @@ export default function ClipboardViewPage() {
 
   const handleCopyContent = async () => {
     try {
-      await navigator.clipboard.writeText(clipboardText)
+      // Si le contenu est du HTML, extraire le texte brut
+      let textToCopy = clipboardText
+      if (isHTML(clipboardText)) {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = clipboardText
+        textToCopy = tempDiv.textContent || tempDiv.innerText || ''
+      }
+
+      await navigator.clipboard.writeText(textToCopy)
       toast({
         title: "Contenu copié !",
         description: "Le contenu a été copié dans le presse-papiers",
@@ -607,67 +786,131 @@ export default function ClipboardViewPage() {
                 </TabsList>
 
                 <TabsContent value="text" className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <Label className="text-sm text-muted-foreground">Mode d'affichage</Label>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={!markdownMode ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setMarkdownMode(false)}
-                        className="flex-1 sm:flex-none text-xs sm:text-sm"
-                      >
-                        Texte brut
-                      </Button>
-                      <Button
-                        variant={markdownMode ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setMarkdownMode(true)}
-                        className="flex-1 sm:flex-none text-xs sm:text-sm"
-                      >
-                        Markdown
-                      </Button>
-                    </div>
-                  </div>
-
-                  {markdownMode ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-2 block">Éditeur</Label>
-                        <Textarea
-                          placeholder="# Titre&#10;&#10;**Gras** *Italique*"
-                          value={clipboardText}
-                          onChange={handleTextChange}
-                          disabled={clipboard?.readOnly}
-                          className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
-                        />
+                  {!clipboard?.readOnly && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-sm text-muted-foreground">Mode d'édition</Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant={editorMode === "rich" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEditorMode("rich")}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
+                        >
+                          Éditeur riche
+                        </Button>
+                        <Button
+                          variant={editorMode === "markdown" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEditorMode("markdown")}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
+                        >
+                          Markdown
+                        </Button>
+                        <Button
+                          variant={editorMode === "plain" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEditorMode("plain")}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
+                        >
+                          Texte brut
+                        </Button>
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-2 block">Aperçu</Label>
-                        <div className="min-h-[300px] md:min-h-[500px] p-4 border rounded-lg bg-muted/30 prose prose-sm dark:prose-invert max-w-none overflow-auto">
-                          <ReactMarkdown>{clipboardText || "*Aucun contenu*"}</ReactMarkdown>
+                    </div>
+                  )}
+
+                  {/* Affichage du contenu */}
+                  {clipboard?.readOnly ? (
+                    // Mode lecture seule : affichage uniquement
+                    isHTML(clipboardText) ? (
+                      <div className="border rounded-lg">
+                        <div className="min-h-[300px] md:min-h-[500px] p-4 prose prose-sm dark:prose-invert max-w-none overflow-auto">
+                          <div dangerouslySetInnerHTML={{ __html: clipboardText }} />
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <Textarea
+                        placeholder="Ce clipboard est vide..."
+                        value={clipboardText}
+                        disabled={true}
+                        className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
+                      />
+                    )
                   ) : (
-                    <Textarea
-                      placeholder={clipboard?.readOnly ? "Ce clipboard est vide..." : "Commencez à taper..."}
-                      value={clipboardText}
-                      onChange={handleTextChange}
-                      disabled={clipboard?.readOnly}
-                      className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
-                    />
+                    // Mode édition
+                    editorMode === "rich" ? (
+                      <RichTextEditor
+                        content={clipboardText}
+                        onChange={(html) => {
+                          setClipboardText(html)
+                          debouncedSave(html)
+                        }}
+                        placeholder="Commencez à taper..."
+                      />
+                    ) : editorMode === "markdown" ? (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">Éditeur</Label>
+                          <Textarea
+                            placeholder="# Titre&#10;&#10;**Gras** *Italique*"
+                            value={clipboardText}
+                            onChange={(e) => {
+                              setClipboardText(e.target.value)
+                              debouncedSave(e.target.value)
+                            }}
+                            className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-2 block">Aperçu</Label>
+                          <div className="min-h-[300px] md:min-h-[500px] p-4 border rounded-lg bg-muted/30 prose prose-sm dark:prose-invert max-w-none overflow-auto">
+                            <ReactMarkdown>{clipboardText || "*Aucun contenu*"}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <Textarea
+                        placeholder="Commencez à taper..."
+                        value={clipboardText}
+                        onChange={(e) => {
+                          setClipboardText(e.target.value)
+                          debouncedSave(e.target.value)
+                        }}
+                        className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
+                      />
+                    )
                   )}
                 </TabsContent>
 
                 <TabsContent value="files" className="space-y-4">
-                  {uploadedFiles.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <FileIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="text-sm">Aucun fichier attaché</p>
+                  {/* Zone de téléchargement (uniquement en mode écriture) */}
+                  {!clipboard?.readOnly && (
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 md:p-8 text-center">
+                      <input
+                        type="file"
+                        id="file-upload"
+                        multiple
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        accept="image/*,.pdf,.doc,.docx,.txt"
+                      />
+                      <label htmlFor="file-upload" className="cursor-pointer">
+                        <Upload className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-4 text-muted-foreground" />
+                        <p className="text-sm font-medium mb-1">Cliquez pour télécharger</p>
+                        <p className="text-xs text-muted-foreground">Images, PDFs, documents (max 15MB)</p>
+                      </label>
                     </div>
+                  )}
+
+                  {uploadedFiles.length === 0 ? (
+                    !clipboard?.readOnly ? null : (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <FileIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-sm">Aucun fichier attaché</p>
+                      </div>
+                    )
                   ) : (
                     <div className="space-y-2">
-                      <Label className="text-sm">Fichiers attachés ({uploadedFiles.length})</Label>
+                      <Label className="text-sm">Fichiers {!clipboard?.readOnly ? "téléchargés" : "attachés"} ({uploadedFiles.length})</Label>
                       <div className="space-y-2">
                         {uploadedFiles.map((file, index) => {
                           const isFileObject = typeof file === "object" && file !== null
@@ -697,16 +940,28 @@ export default function ClipboardViewPage() {
                                   )}
                                 </div>
                               </div>
-                              <a
-                                href={fileUrl}
-                                download={fileName}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <Button variant="ghost" size="sm">
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </a>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={fileUrl}
+                                  download={fileName}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <Button variant="ghost" size="sm">
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                </a>
+                                {/* Bouton supprimer (uniquement en mode écriture) */}
+                                {!clipboard?.readOnly && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveFile(index)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -737,6 +992,13 @@ export default function ClipboardViewPage() {
                     <span className="flex items-center gap-1">
                       <Eye className="h-3 w-3" />
                       Lecture seule
+                    </span>
+                  )}
+                  {/* Indicateur de synchronisation */}
+                  {!clipboard?.readOnly && (
+                    <span className="flex items-center gap-2">
+                      <span className={"h-2 w-2 rounded-full animate-pulse " + (isSynch ? "bg-green-500" : "bg-orange-500")} />
+                      {isSynch ? "Synchronisé" : "Non synchronisé"}
                     </span>
                   )}
                 </div>

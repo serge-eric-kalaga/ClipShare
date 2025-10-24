@@ -1,0 +1,155 @@
+/* Styles pour l'éditeur TipTap */
+.ProseMirror {
+    outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: #adb5bd;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
+
+.ProseMirror table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 1rem 0;
+    overflow: hidden;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+    border: 2px solid #ced4da;
+    box-sizing: border-box;
+    min-width: 1em;
+    padding: 0.5rem;
+    position: relative;
+    vertical-align: top;
+}
+
+.ProseMirror table th {
+    background-color: #f1f3f5;
+    font-weight: bold;
+    text-align: left;
+}
+
+.ProseMirror table .selectedCell {
+    background-color: #e9ecef;
+}
+
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1rem auto;
+}
+
+.ProseMirror blockquote {
+    border-left: 4px solid #ced4da;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+    font-style: italic;
+    color: #6c757d;
+}
+
+.ProseMirror code {
+    background-color: #f1f3f5;
+    border-radius: 0.25rem;
+    color: #e83e8c;
+    font-size: 0.875em;
+    padding: 0.125rem 0.25rem;
+}
+
+.ProseMirror pre {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    color: #212529;
+    font-family: 'Courier New', Courier, monospace;
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.ProseMirror pre code {
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    padding: 0;
+}
+
+.ProseMirror hr {
+    border: none;
+    border-top: 2px solid #dee2e6;
+    margin: 2rem 0;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+    padding-left: 1.5rem;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+    line-height: 1.2;
+}
+
+.ProseMirror h1 {
+    font-size: 2rem;
+}
+
+.ProseMirror h2 {
+    font-size: 1.5rem;
+}
+
+.ProseMirror h3 {
+    font-size: 1.25rem;
+}
+
+.ProseMirror mark {
+    background-color: #fff3cd;
+    padding: 0.125rem 0;
+}
+
+/* Dark mode styles */
+.dark .ProseMirror table th {
+    background-color: #343a40;
+}
+
+.dark .ProseMirror table td,
+.dark .ProseMirror table th {
+    border-color: #495057;
+}
+
+.dark .ProseMirror table .selectedCell {
+    background-color: #495057;
+}
+
+.dark .ProseMirror blockquote {
+    border-left-color: #495057;
+    color: #adb5bd;
+}
+
+.dark .ProseMirror code {
+    background-color: #343a40;
+    color: #f783ac;
+}
+
+.dark .ProseMirror pre {
+    background-color: #212529;
+    color: #f8f9fa;
+}
+
+.dark .ProseMirror hr {
+    border-top-color: #495057;
+}
+
+.dark .ProseMirror mark {
+    background-color: #664d03;
+    color: #fff;
+}
