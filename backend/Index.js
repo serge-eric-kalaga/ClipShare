@@ -78,8 +78,121 @@ app.all("/", (req, res, next) => {
 
 app.use(globalErrorHandler);
 
+// Create HTTP server and attach socket.io
+const http = require("http");
+const { Server } = require("socket.io");
+const server = http.createServer(app);
 
-app.listen(PORT, "0.0.0.0", async () => {
+// Attach socket.io with permissive CORS for development (restrict in prod)
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Expose io instance via app so controllers can emit events
+app.set('io', io);
+
+// Import Clipboard model for visit increments inside socket handlers
+const { Clipboard } = require("./models/Models");
+
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+
+  // Log ALL events received for debugging
+  socket.onAny((eventName, ...args) => {
+    console.log(`[Socket Event] ${socket.id} => ${eventName}`, args);
+  });
+
+  // Join user room for dashboard updates
+  socket.on('joinUser', ({ userId } = {}) => {
+    try {
+      if (!userId) return;
+      const userRoom = `user:${userId}`;
+      socket.join(userRoom);
+      console.log(`User ${userId} joined their room: ${userRoom}`);
+    } catch (err) {
+      console.error('joinUser error', err);
+    }
+  });
+
+  // Leave user room
+  socket.on('leaveUser', ({ userId } = {}) => {
+    try {
+      if (!userId) return;
+      const userRoom = `user:${userId}`;
+      socket.leave(userRoom);
+      console.log(`User ${userId} left their room: ${userRoom}`);
+    } catch (err) {
+      console.error('leaveUser error', err);
+    }
+  });
+
+  socket.on('joinClipboard', async ({ clipboardId } = {}) => {
+    try {
+      if (!clipboardId) return;
+      // join room
+      socket.join(clipboardId);
+
+      // increment visits (historical views)
+      let updated = null;
+      try {
+        updated = await Clipboard.findByIdAndUpdate(clipboardId, { $inc: { visits: 1 } }, { new: true });
+      } catch (err) {
+        // ignore DB errors here but log
+        console.error('Error incrementing visits for', clipboardId, err);
+      }
+
+      const room = io.sockets.adapter.rooms.get(clipboardId);
+      const active = room ? room.size : 0;
+      const totalViews = updated?.visits || 0;
+
+      io.to(clipboardId).emit('clipboard:viewers', { clipboardId, active, totalViews });
+    } catch (err) {
+      console.error('joinClipboard error', err);
+    }
+  });
+
+  socket.on('leaveClipboard', async ({ clipboardId } = {}) => {
+    try {
+      if (!clipboardId) return;
+      socket.leave(clipboardId);
+      const room = io.sockets.adapter.rooms.get(clipboardId);
+      const active = room ? room.size : 0;
+      // read visits from DB
+      let clip = null;
+      try {
+        clip = await Clipboard.findById(clipboardId);
+      } catch (err) {
+        console.error('Error fetching clipboard for leaveClipboard', err);
+      }
+      const totalViews = clip?.visits || 0;
+      io.to(clipboardId).emit('clipboard:viewers', { clipboardId, active, totalViews });
+    } catch (err) {
+      console.error('leaveClipboard error', err);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    // When a socket disconnects, emit updated counts for rooms it was in
+    try {
+      const rooms = Array.from(socket.rooms || []);
+      rooms.forEach((roomId) => {
+        // socket.rooms contains its own id as well - skip
+        if (roomId === socket.id) return;
+        const room = io.sockets.adapter.rooms.get(roomId);
+        const active = room ? room.size : 0;
+        // We don't fetch visits here to avoid DB load on every disconnect
+        io.to(roomId).emit('clipboard:viewers', { clipboardId: roomId, active, totalViews: null });
+      });
+    } catch (err) {
+      console.error('disconnect handler error', err);
+    }
+  });
+});
+
+server.listen(PORT, "0.0.0.0", async () => {
   console.log(`App running on http://localhost:${PORT}`);
 
   setTimeout(async () => {

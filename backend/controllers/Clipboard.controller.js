@@ -1,5 +1,25 @@
 const { Clipboard, CreateClipboardModel } = require("../models/Models");
 
+// Helper pour émettre les événements socket à la fois dans la room du clipboard et de l'utilisateur
+const emitClipboardUpdate = (io, clipboard, eventType = 'clipboard:update') => {
+    if (!io || !clipboard) return;
+
+    const clipboardId = clipboard._id.toString();
+    const ownerId = clipboard.owner ? clipboard.owner.toString() : null;
+
+    console.log(`[Socket.IO] Emitting ${eventType} for clipboard ${clipboardId}`);
+    console.log(`[Socket.IO] Owner: ${ownerId}`);
+
+    // Émettre dans la room du clipboard (pour tous les viewers)
+    io.to(clipboardId).emit(eventType, { data: clipboard });
+    console.log(`[Socket.IO] Emitted to clipboard room: ${clipboardId}`);
+
+    // Émettre aussi dans la room de l'utilisateur propriétaire (pour le dashboard)
+    if (ownerId) {
+        io.to(`user:${ownerId}`).emit(eventType, { data: clipboard });
+        console.log(`[Socket.IO] Emitted to user room: user:${ownerId}`);
+    }
+};
 
 module.exports = {
 
@@ -29,6 +49,16 @@ module.exports = {
                 clipboard.files.push(fileUrl);
                 await clipboard.save();
 
+                // Emit socket update for this clipboard
+                try {
+                    const io = req.app && req.app.get && req.app.get('io');
+                    if (io) {
+                        emitClipboardUpdate(io, clipboard);
+                    }
+                } catch (err) {
+                    console.error('Error emitting socket event for clipboard file update', err);
+                }
+
                 return res.Response({ data: clipboard });
             }
 
@@ -38,6 +68,15 @@ module.exports = {
                 files: [fileUrl],
             });
             const savedClipboard = await newClipboard.save();
+            // Emit socket update for this new clipboard
+            try {
+                const io = req.app && req.app.get && req.app.get('io');
+                if (io) {
+                    emitClipboardUpdate(io, savedClipboard);
+                }
+            } catch (err) {
+                console.error('Error emitting socket event for new clipboard', err);
+            }
             return res.Response({ data: savedClipboard });
 
         } catch (error) {
@@ -153,6 +192,16 @@ module.exports = {
                 });
             }
 
+            // Emit socket deletion event
+            try {
+                const io = req.app && req.app.get && req.app.get('io');
+                if (io) {
+                    io.to(clipboardId.toString()).emit('clipboard:deleted', { clipboardId });
+                }
+            } catch (err) {
+                console.error('Error emitting clipboard:deleted', err);
+            }
+
             res.Response({ message: "Entrée du presse-papiers supprimée avec succès !" });
         } catch (error) {
             next(error);
@@ -174,8 +223,6 @@ module.exports = {
             // Mise à jour, si un ID est fourni dans le corps de la requête
             if (req.query?._id != null && req.body?._id !== undefined) {
 
-
-
                 const existingEntry = await Clipboard.findById(req.body._id);
 
                 // Vérifier si l'entrée du presse-papiers existe
@@ -183,21 +230,46 @@ module.exports = {
                     return res.status(404).Response({ message: "Entrée du presse-papiers non trouvée !" });
                 }
 
-                // Vérifier si le clipboard est en lecture seule ET si l'utilisateur n'est pas le propriétaire
-                if (existingEntry.readOnly === true && existingEntry.owner && (!res.user || existingEntry.owner.toString() !== res.user.id.toString())) {
-                    return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier cette entrée du presse-papiers !" });
+                // Vérifier si on tente de modifier les paramètres de sécurité
+                const securityFields = ['password', 'readOnly', 'expireAt'];
+                const isModifyingSecurity = securityFields.some(field =>
+                    req.body.hasOwnProperty(field) && req.body[field] !== existingEntry[field]
+                );
+
+                // Si on modifie la sécurité, seul le propriétaire peut le faire
+                if (isModifyingSecurity) {
+                    if (!res.user || !existingEntry.owner || existingEntry.owner.toString() !== res.user.id.toString()) {
+                        return res.status(403).Response({
+                            message: "Seul le propriétaire peut modifier les paramètres de sécurité !"
+                        });
+                    }
                 }
 
-                // Vérifier si le clipboard a un propriétaire ET l'utilisateur n'est pas le propriétaire
-                if (existingEntry.owner && (!res.user || existingEntry.owner.toString() !== res.user.id.toString())) {
-                    return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier cette entrée du presse-papiers !" });
+                // Vérifier si le clipboard est en lecture seule (pour les modifications de contenu)
+                if (existingEntry.readOnly === true) {
+                    // En lecture seule, seul le propriétaire peut modifier le contenu
+                    if (existingEntry.owner && (!res.user || existingEntry.owner.toString() !== res.user.id.toString())) {
+                        return res.status(403).Response({ message: "Ce clipboard est en lecture seule !" });
+                    }
                 }
+
+                // Si le clipboard n'est pas en lecture seule, tout le monde peut modifier le contenu
+                // (comportement collaboratif)
 
                 CreateClipboardModel.validateAsync(req.body).then(async (value) => {
                     await Clipboard.findByIdAndUpdate(req.body._id, {
                         ...value,
                     });
                     const updatedEntry = await Clipboard.findById(req.body._id);
+                    // Emit socket update for this updated clipboard
+                    try {
+                        const io = req.app && req.app.get && req.app.get('io');
+                        if (io) {
+                            emitClipboardUpdate(io, updatedEntry);
+                        }
+                    } catch (err) {
+                        console.error('Error emitting socket event for updated clipboard', err);
+                    }
                     res.Response({ data: updatedEntry });
                 }).catch(err => {
                     next(err);
@@ -325,6 +397,16 @@ module.exports = {
             // Basculer le statut favori
             entry.isFavorite = !entry.isFavorite;
             await entry.save();
+
+            // Emit socket update to notify viewers
+            try {
+                const io = req.app && req.app.get && req.app.get('io');
+                if (io) {
+                    emitClipboardUpdate(io, entry);
+                }
+            } catch (err) {
+                console.error('Error emitting favorite update', err);
+            }
 
             res.Response({
                 data: entry,

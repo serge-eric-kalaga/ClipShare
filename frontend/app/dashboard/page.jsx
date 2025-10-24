@@ -36,6 +36,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
+import { io as socketIoClient } from "socket.io-client"
 import QRCodeDisplay from "@/components/qr-code-display"
 import RichTextEditor from "@/components/rich-text-editor"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -70,6 +71,9 @@ export default function DashboardPage() {
   const [copied, setCopied] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [clipboardHistory, setClipboardHistory] = useState([])
+
+  // DEBUG: Log renders and clipboardHistory
+  console.log('[RENDER] DashboardPage clipboardHistory length:', clipboardHistory.length, 'items:', clipboardHistory.map(c => ({ id: c.id.substring(0, 8), title: c.title?.substring(0, 20) })))
   const [searchQuery, setSearchQuery] = useState("")
   const [filterFavorites, setFilterFavorites] = useState(false)
   const [contentType, setContentType] = useState("text")
@@ -94,6 +98,17 @@ export default function DashboardPage() {
 
   // Ref pour le timer de debounce (auto-save après 2 secondes)
   const saveTimerRef = useRef(null)
+  // Track recent save to avoid showing notification for our own changes
+  const recentSaveRef = useRef(false)
+
+  // Socket.io client ref
+  const socketRef = useRef(null)
+  // Track the clipboard room we joined to leave later
+  const joinedClipboardRef = useRef(null)
+  // Socket connection state
+  const [socketConnected, setSocketConnected] = useState(false)
+  // Track if we just received a socket update to avoid reloading from API
+  const recentSocketUpdateRef = useRef(false)
 
   // Fonction pour vérifier si le clipboard actuel est vide
   const isCurrentClipboardEmpty = () => {
@@ -120,6 +135,10 @@ export default function DashboardPage() {
         }
 
         currentUser = JSON.parse(decryptedData)
+        // Normaliser l'ID : ajouter .id si seulement user_id existe
+        if (currentUser.user_id && !currentUser.id) {
+          currentUser.id = currentUser.user_id
+        }
         setUser(currentUser)
 
         guest = false
@@ -239,6 +258,8 @@ export default function DashboardPage() {
             lastViewed: null,
             activeViewers: [],
           }))
+
+          console.log('[loadClipboardHistory] Loaded from API, replacing state with', mappedClipboards.length, 'items')
           setClipboardHistory(mappedClipboards)
         })
         .catch((err) => {
@@ -252,6 +273,169 @@ export default function DashboardPage() {
       }
     }
   }
+
+  // Helper pour mapper une entrée backend vers le format frontend
+  const mapBackendClip = (clip) => {
+    return {
+      id: clip._id ? clip._id.toString() : clip.id,
+      url: clip._id ? `${window.location.origin}/clip/${clip._id}` : clip.url,
+      text: clip.content || clip.text || "",
+      title: clip.title || "Sans titre",
+      isFavorite: clip.isFavorite || false,
+      password: clip.password || "",
+      expiration: clip.expireAt || clip.expiration || null,
+      readOnly: clip.readOnly || false,
+      contentType: "text",
+      files: clip.files || [],
+      markdownMode: false,
+      createdAt: clip.createdAt,
+      updatedAt: clip.updatedAt,
+      views: clip.visits || clip.views || 0,
+      lastViewed: clip.lastViewed || null,
+      activeViewers: clip.activeViewers || [],
+    }
+  }
+
+  // Socket.io client : connexion et listeners
+  useEffect(() => {
+    try {
+      socketRef.current = socketIoClient(process.env.NEXT_PUBLIC_API_URL || window.location.origin)
+
+      socketRef.current.on('connect', () => {
+        console.log('socket connected', socketRef.current.id)
+        console.log('user at connection time:', user)
+        setSocketConnected(true)
+
+        // Rejoindre la room de l'utilisateur pour recevoir toutes les mises à jour de ses clipboards
+        // Note: user might not be loaded yet, will join in separate useEffect below
+        if (user?.id) {
+          console.log('Joining user room at connection:', user.id)
+          socketRef.current.emit('joinUser', { userId: user.id })
+        } else {
+          console.log('User not loaded yet at connection, will join later')
+        }
+      })
+
+      socketRef.current.on('disconnect', () => {
+        console.log('socket disconnected')
+        setSocketConnected(false)
+      })
+
+      // Log ALL socket events for debugging
+      socketRef.current.onAny((eventName, ...args) => {
+        console.log(`[Socket Event Received] ${eventName}`, args)
+      })
+
+      socketRef.current.on('clipboard:update', (payload) => {
+        console.log('[clipboard:update] Received payload:', payload)
+        const clip = payload?.data || payload
+        console.log('[clipboard:update] Parsed clip:', clip)
+        const mapped = mapBackendClip(clip)
+        console.log('[clipboard:update] Mapped clip:', mapped)
+
+        // Mark that we received a socket update
+        recentSocketUpdateRef.current = true
+        // Reset the flag after a short delay
+        setTimeout(() => {
+          recentSocketUpdateRef.current = false
+        }, 1000)
+
+        // Silent update - no notification needed
+        setClipboardHistory((prev) => {
+          console.log('[clipboard:update] Current history length:', prev.length)
+          const exists = prev.some((c) => c.id === mapped.id)
+          console.log('[clipboard:update] Clipboard exists in history:', exists)
+          if (exists) {
+            // Find the existing item
+            const existingItem = prev.find((c) => c.id === mapped.id)
+            console.log('[clipboard:update] OLD item text:', existingItem?.text?.substring(0, 50))
+            console.log('[clipboard:update] NEW item text:', mapped.text?.substring(0, 50))
+            console.log('[clipboard:update] Text changed?', existingItem?.text !== mapped.text)
+
+            // Mettre à jour le clipboard existant - ALWAYS create new array
+            const updated = prev.map((c) => (c.id === mapped.id ? { ...mapped } : c))
+            console.log('[clipboard:update] Updated history - new array:', updated !== prev)
+            return updated
+          } else {
+            // Ajouter le nouveau clipboard au début de l'historique
+            console.log('[clipboard:update] Adding new clipboard to history')
+            return [mapped, ...prev]
+          }
+        })
+
+        // If currently joined to that clipboard, update the editor state
+        if (joinedClipboardRef.current && joinedClipboardRef.current === mapped.id) {
+          console.log('[clipboard:update] Updating editor for joined clipboard')
+          setClipboardText(mapped.text)
+          setClipboardTitle(mapped.title)
+          setUploadedFiles(mapped.files || [])
+          setClipboardPassword(mapped.password || "")
+          setClipboardExpiration(mapped.expiration || "never")
+          setClipboardReadOnly(mapped.readOnly || false)
+          setClipboardCreatedAt(mapped.createdAt || "")
+          setClipboardUpdatedAt(mapped.updatedAt || "")
+        }
+      })
+
+      socketRef.current.on('clipboard:deleted', (payload) => {
+        const clipboardId = payload?.clipboardId || payload
+        setClipboardHistory((prev) => prev.filter((c) => c.id !== clipboardId))
+        if (joinedClipboardRef.current === clipboardId) {
+          setClipboardText("")
+          setClipboardTitle("")
+          setCurrentClipboardId("")
+          setUploadedFiles([])
+        }
+      })
+
+      socketRef.current.on('clipboard:viewers', (data) => {
+        const { clipboardId, active, totalViews } = data || {}
+        setClipboardHistory((prev) =>
+          prev.map((c) => {
+            if (c.id === clipboardId) {
+              return {
+                ...c,
+                views: totalViews != null ? totalViews : c.views,
+                // create placeholder active viewers array so UI can display a count
+                activeViewers: Array.from({ length: active || 0 }).map((_, i) => ({ name: `Viewer ${i + 1}`, color: '#777' })),
+              }
+            }
+            return c
+          })
+        )
+      })
+    } catch (err) {
+      console.error('Socket init error', err)
+    }
+
+    return () => {
+      try {
+        if (socketRef.current) {
+          // Quitter la room du clipboard actuel si rejoint
+          if (joinedClipboardRef.current) {
+            socketRef.current.emit('leaveClipboard', { clipboardId: joinedClipboardRef.current })
+            joinedClipboardRef.current = null
+          }
+          // Quitter la room utilisateur
+          if (user?.id) {
+            socketRef.current.emit('leaveUser', { userId: user.id })
+          }
+          socketRef.current.disconnect()
+        }
+      } catch (err) {
+        console.error('Socket cleanup error', err)
+      }
+    }
+  }, [user])
+
+  // Rejoindre la room utilisateur quand user est chargé et socket est connecté
+  useEffect(() => {
+    console.log('[joinUser Effect] user:', user?.id, 'socketConnected:', socketConnected, 'socketRef:', !!socketRef.current)
+    if (socketRef.current && socketConnected && user?.id) {
+      console.log('User loaded, joining user room:', user.id)
+      socketRef.current.emit('joinUser', { userId: user.id })
+    }
+  }, [user, socketConnected])
 
   // Fonction pour sauvegarder automatiquement après 2 secondes de pause
   const debouncedSave = useCallback(() => {
@@ -332,6 +516,20 @@ export default function DashboardPage() {
           localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
           loadClipboardHistory()
 
+          // Join socket room for the newly created clipboard
+          try {
+            if (socketRef.current && id) {
+              // leave previous if any
+              if (joinedClipboardRef.current && joinedClipboardRef.current !== id) {
+                socketRef.current.emit('leaveClipboard', { clipboardId: joinedClipboardRef.current })
+              }
+              socketRef.current.emit('joinClipboard', { clipboardId: id })
+              joinedClipboardRef.current = id
+            }
+          } catch (err) {
+            console.error('Socket join error after create', err)
+          }
+
           toast({
             title: "Nouveau clipboard créé",
             description: "Sauvegardé sur le serveur",
@@ -404,6 +602,19 @@ export default function DashboardPage() {
           historyArray.unshift(clipboard)
           localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
           setClipboardHistory(historyArray)
+
+          // Join socket room for the newly created clipboard (guest flow)
+          try {
+            if (socketRef.current && id) {
+              if (joinedClipboardRef.current && joinedClipboardRef.current !== id) {
+                socketRef.current.emit('leaveClipboard', { clipboardId: joinedClipboardRef.current })
+              }
+              socketRef.current.emit('joinClipboard', { clipboardId: id })
+              joinedClipboardRef.current = id
+            }
+          } catch (err) {
+            console.error('Socket join error after create (guest)', err)
+          }
 
           toast({
             title: "Nouveau clipboard créé",
@@ -864,6 +1075,23 @@ export default function DashboardPage() {
     setClipboardCreatedAt(clipboard.createdAt || "")
     setClipboardUpdatedAt(clipboard.updatedAt || "")
     localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+    // Manage socket rooms: leave previous clipboard room and join the new one
+    try {
+      const prev = joinedClipboardRef.current
+      const newId = clipboard.id || (clipboard._id ? clipboard._id.toString() : null)
+      if (socketRef.current) {
+        if (prev && prev !== newId) {
+          socketRef.current.emit('leaveClipboard', { clipboardId: prev })
+        }
+        if (newId) {
+          socketRef.current.emit('joinClipboard', { clipboardId: newId })
+          joinedClipboardRef.current = newId
+        }
+      }
+    } catch (err) {
+      console.error('Error managing socket room on load', err)
+    }
+
     setShowHistory(false)
 
     toast({
@@ -922,6 +1150,16 @@ export default function DashboardPage() {
       setClipboardHistory(JSON.parse(history))
     } else {
       setClipboardHistory([])
+    }
+
+    // Leave socket room if any
+    try {
+      if (socketRef.current && joinedClipboardRef.current) {
+        socketRef.current.emit('leaveClipboard', { clipboardId: joinedClipboardRef.current })
+        joinedClipboardRef.current = null
+      }
+    } catch (err) {
+      console.error('Socket leave error on logout', err)
     }
 
     toast({
@@ -998,6 +1236,13 @@ export default function DashboardPage() {
   // Reload data when page changes for connected users
   useEffect(() => {
     if (!isGuest && user) {
+      // Don't reload if we just received a socket update
+      if (recentSocketUpdateRef.current) {
+        console.log('[Pagination useEffect] Skipping reload - recent socket update')
+        recentSocketUpdateRef.current = false
+        return
+      }
+      console.log('[Pagination useEffect] Loading page', currentPage)
       loadClipboardHistory()
     }
   }, [currentPage])
@@ -1124,40 +1369,36 @@ export default function DashboardPage() {
     }
   }
 
-  // Function to get clipboard stats
+  // Function to get clipboard stats - now uses state instead of localStorage for real-time updates
   const getClipboardStats = (clipboardId) => {
     // Vérifier que nous sommes côté client
     if (typeof window === "undefined") {
       return null
     }
 
-    // D'abord vérifier le clipboard actuel
-    const currentClipboard = localStorage.getItem("current_clipboard")
-    if (currentClipboard) {
-      const clipboard = JSON.parse(currentClipboard)
-      if (clipboard.id === clipboardId) {
-        return {
-          views: clipboard.views || 0,
-          lastViewed: clipboard.lastViewed,
-          activeViewers: clipboard.activeViewers || [],
-          createdAt: clipboard.createdAt,
-          updatedAt: clipboard.updatedAt,
-        }
+    // Chercher dans clipboardHistory (state) pour obtenir les stats en temps réel
+    const clipboard = clipboardHistory.find((item) => item.id === clipboardId)
+    if (clipboard) {
+      return {
+        views: clipboard.views || 0,
+        lastViewed: clipboard.lastViewed,
+        activeViewers: clipboard.activeViewers || [],
+        createdAt: clipboard.createdAt,
+        updatedAt: clipboard.updatedAt,
       }
     }
 
-    // Sinon chercher dans l'historique
-    const history = localStorage.getItem("clipboard_history")
-    if (history) {
-      const historyArray = JSON.parse(history)
-      const clipboard = historyArray.find((item) => item.id === clipboardId)
-      if (clipboard) {
+    // Fallback: vérifier le clipboard actuel dans localStorage
+    const currentClipboard = localStorage.getItem("current_clipboard")
+    if (currentClipboard) {
+      const clip = JSON.parse(currentClipboard)
+      if (clip.id === clipboardId) {
         return {
-          views: clipboard.views || 0,
-          lastViewed: clipboard.lastViewed,
-          activeViewers: clipboard.activeViewers || [],
-          createdAt: clipboard.createdAt,
-          updatedAt: clipboard.updatedAt,
+          views: clip.views || 0,
+          lastViewed: clip.lastViewed,
+          activeViewers: clip.activeViewers || [],
+          createdAt: clip.createdAt,
+          updatedAt: clip.updatedAt,
         }
       }
     }
@@ -1384,6 +1625,11 @@ export default function DashboardPage() {
                             </p>
                             <p className="text-xs text-muted-foreground mb-2">
                               {clipboard.views || 0} vue(s)
+                              {clipboard.activeViewers && clipboard.activeViewers.length > 0 && (
+                                <span className="ml-2 text-green-600">
+                                  • {clipboard.activeViewers.length} en ligne
+                                </span>
+                              )}
                               {clipboard.lastViewed && ` • Dernière vue: ${formatDate(clipboard.lastViewed)}`}
                             </p>
                             <p className="text-sm font-mono bg-muted p-2 rounded truncate">
@@ -1822,7 +2068,7 @@ export default function DashboardPage() {
                         ) : (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Expire dans {clipboardExpiration} heure(s)
+                            Expire le {formatDate(clipboardExpiration)} heure(s)
                           </span>
                         )}
                       </div>
@@ -1830,6 +2076,12 @@ export default function DashboardPage() {
                         <span className={"h-2 w-2 rounded-full animate-pulse " + (isSynch ? "bg-green-500" : "bg-orange-500")} />
                         {isSynch ? "Synchronisé" : "Non synchronisé"}
                       </span>
+                      {socketConnected && (
+                        <span className="flex items-center gap-2 text-green-600">
+                          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                          Temps réel actif
+                        </span>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1896,8 +2148,13 @@ export default function DashboardPage() {
                   </div>
                   <div className="pt-4 border-t">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">Viewers actifs</span>
-                      <span className="text-sm font-semibold">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        Viewers actifs
+                        {getClipboardStats(currentClipboardId)?.activeViewers?.length > 0 && (
+                          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        )}
+                      </span>
+                      <span className="text-sm font-semibold text-green-600">
                         {getClipboardStats(currentClipboardId)?.activeViewers?.length || 0}
                       </span>
                     </div>
@@ -1906,14 +2163,10 @@ export default function DashboardPage() {
                         getClipboardStats(currentClipboardId).activeViewers.map((viewer, index) => (
                           <div
                             key={index}
-                            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold"
-                            style={{
-                              backgroundColor: viewer.color,
-                              color: "#fff",
-                            }}
-                            title={viewer.name}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md"
+                            title={viewer.name || `Viewer ${index + 1}`}
                           >
-                            {viewer.name.charAt(0).toUpperCase()}
+                            {(viewer.name || `V${index + 1}`).charAt(0).toUpperCase()}
                           </div>
                         ))
                       ) : (

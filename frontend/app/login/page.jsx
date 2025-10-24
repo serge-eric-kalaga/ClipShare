@@ -55,11 +55,8 @@ export default function LoginPage() {
             return
           }
         }
-
         router.push("/dashboard")
 
-        // Rediriger vers /sync s'il y a potentiellement des clipboards à synchroniser
-        // La page /sync fera la vérification complète avec le serveur
         if (hasLocalClipboards) {
           router.push("/sync")
         } else {

@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import ReactMarkdown from "react-markdown"
 import RichTextEditor from "@/components/rich-text-editor"
 import axios from "axios"
+import { io as socketIoClient } from "socket.io-client"
 
 const generateRandomColor = () => {
   const colors = ["#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#06b6d4", "#6366f1", "#f97316"]
@@ -49,9 +50,15 @@ export default function ClipboardViewPage() {
   const [copied, setCopied] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [isSynch, setIsSynch] = useState(true)
+  const [socketConnected, setSocketConnected] = useState(false)
+  const [totalViews, setTotalViews] = useState(0)
 
   // Ref pour le timer de debounce (auto-save après 2 secondes)
   const saveTimerRef = useRef(null)
+  // Socket.io client ref
+  const socketRef = useRef(null)
+  // Ref pour suivre si l'utilisateur est en train de taper
+  const isTypingRef = useRef(false)
 
   // Fonction de sauvegarde avec debounce
   const debouncedSave = useCallback(async (newText) => {
@@ -410,6 +417,141 @@ export default function ClipboardViewPage() {
     loadClipboard()
   }, [params.id, user])
 
+  // Socket.io client : connexion et listeners pour les mises à jour en temps réel
+  useEffect(() => {
+    if (!params.id || params.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(params.id)) {
+      // Ne pas se connecter pour les clipboards locaux
+      return
+    }
+
+    try {
+      socketRef.current = socketIoClient(process.env.NEXT_PUBLIC_API_URL || window.location.origin)
+
+      socketRef.current.on('connect', () => {
+        console.log('Socket connected:', socketRef.current.id)
+        setSocketConnected(true)
+        // Rejoindre la salle du clipboard
+        socketRef.current.emit('joinClipboard', { clipboardId: params.id })
+      })
+
+      socketRef.current.on('disconnect', () => {
+        console.log('Socket disconnected')
+        setSocketConnected(false)
+      })
+
+      // Écouter les mises à jour du clipboard
+      socketRef.current.on('clipboard:update', (payload) => {
+        const clipData = payload?.data || payload
+        if (clipData._id === params.id || clipData.id === params.id) {
+          // Check for security changes to show notifications
+          const prevClipboard = clipboard
+          const becameReadOnly = clipData.readOnly && (!prevClipboard || !prevClipboard.readOnly)
+          const passwordAdded = clipData.password && (!prevClipboard || !prevClipboard.password)
+          const passwordRemoved = !clipData.password && prevClipboard && prevClipboard.password
+
+          // If password was added and we were viewing the content, lock it
+          if (passwordAdded && !isLocked) {
+            setIsLocked(true)
+            toast({
+              title: "🔐 Mot de passe requis",
+              description: "Le propriétaire a ajouté un mot de passe. Veuillez le saisir pour continuer.",
+              duration: 5000,
+            })
+          }
+
+          // If password was removed and we were locked, unlock
+          if (passwordRemoved && isLocked) {
+            setIsLocked(false)
+            setClipboardText(clipData.content || clipData.text || "")
+            toast({
+              title: "🔓 Accès déverrouillé",
+              description: "Le mot de passe a été supprimé. Vous pouvez maintenant voir le contenu.",
+              duration: 4000,
+            })
+          }
+
+          // Ne pas écraser le contenu si l'utilisateur est en train de taper ou si le clipboard est verrouillé
+          if (!isTypingRef.current && !isLocked) {
+            setClipboardText(clipData.content || clipData.text || "")
+          }
+
+          // Toujours mettre à jour les fichiers et autres données (silencieusement)
+          setUploadedFiles(clipData.files || [])
+          setClipboard((prev) => ({
+            ...prev,
+            text: clipData.content || clipData.text || "",
+            content: clipData.content || clipData.text || "",
+            files: clipData.files || [],
+            updatedAt: clipData.updatedAt,
+            title: clipData.title || prev?.title,
+            // Update security settings in real-time
+            password: clipData.password,
+            readOnly: clipData.readOnly,
+            expireAt: clipData.expireAt,
+          }))
+
+          // Show notification for read-only mode
+          if (becameReadOnly) {
+            toast({
+              title: "🔒 Mode lecture seule activé",
+              description: "Le propriétaire a activé le mode lecture seule",
+              duration: 4000,
+            })
+          }
+        }
+      })
+
+      // Écouter les suppressions
+      socketRef.current.on('clipboard:deleted', (payload) => {
+        const clipboardId = payload?.clipboardId || payload
+        if (clipboardId === params.id) {
+          toast({
+            title: "Clipboard supprimé",
+            description: "Ce clipboard a été supprimé",
+            variant: "destructive",
+          })
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 2000)
+        }
+      })
+
+      // Écouter les viewers actifs
+      socketRef.current.on('clipboard:viewers', (data) => {
+        const { clipboardId, active, totalViews: views } = data || {}
+        if (clipboardId === params.id) {
+          setActiveViewers(
+            Array.from({ length: active || 0 }).map((_, i) => ({
+              name: `Viewer ${i + 1}`,
+              color: generateRandomColor(),
+            }))
+          )
+          if (views != null) {
+            setTotalViews(views)
+            setClipboard((prev) => ({
+              ...prev,
+              views,
+            }))
+          }
+        }
+      })
+
+      // Cleanup on unmount
+      return () => {
+        try {
+          if (socketRef.current) {
+            socketRef.current.emit('leaveClipboard', { clipboardId: params.id })
+            socketRef.current.disconnect()
+          }
+        } catch (err) {
+          console.error('Socket cleanup error', err)
+        }
+      }
+    } catch (err) {
+      console.error('Socket init error', err)
+    }
+  }, [params.id, toast, router])
+
   const handlePasswordSubmit = (e) => {
     e.preventDefault()
     if (clipboard && passwordInput === clipboard.password) {
@@ -429,7 +571,10 @@ export default function ClipboardViewPage() {
     const newText = e.target.value
     setClipboardText(newText)
 
-    // Mettre à jour localStorage uniquement (pas d'auto-save API pour les visiteurs)
+    // Marquer que l'utilisateur est en train de taper
+    isTypingRef.current = true
+
+    // Mettre à jour localStorage
     const history = localStorage.getItem("clipboard_history")
     if (history) {
       const historyArray = JSON.parse(history)
@@ -451,6 +596,17 @@ export default function ClipboardViewPage() {
         localStorage.setItem("current_clipboard", JSON.stringify(clipboardData))
       }
     }
+
+    // Réinitialiser isTyping après 3 secondes d'inactivité
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+    }
+    setTimeout(() => {
+      isTypingRef.current = false
+    }, 3000)
+
+    // Déclencher la sauvegarde automatique avec debounce
+    debouncedSave(newText)
   }
 
   const handleCopyUrl = async () => {
@@ -712,6 +868,20 @@ export default function ClipboardViewPage() {
                   <span>Protégé</span>
                 </div>
               )}
+              {clipboard?.expireAt && (
+                <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/10 border border-orange-500/20 text-xs">
+                  <Clock className="h-3 w-3 text-orange-600" />
+                  <span className="text-orange-600">
+                    Expire le {new Date(clipboard.expireAt).toLocaleDateString("fr-FR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
+                  </span>
+                </div>
+              )}
               {currentViewer && (
                 <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 rounded-full bg-muted">
                   <div
@@ -724,6 +894,20 @@ export default function ClipboardViewPage() {
                     {currentViewer.name.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-[10px] md:text-xs font-medium hidden sm:inline">{currentViewer.name}</span>
+                </div>
+              )}
+              {activeViewers.length > 0 && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                  <Users className="h-3 w-3 text-green-600" />
+                  <span className="text-[10px] md:text-xs font-medium text-green-600">
+                    {activeViewers.length + 1} en ligne
+                  </span>
+                </div>
+              )}
+              {socketConnected && (
+                <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[10px] text-green-600 font-medium">Temps réel</span>
                 </div>
               )}
             </div>
@@ -841,7 +1025,18 @@ export default function ClipboardViewPage() {
                       <RichTextEditor
                         content={clipboardText}
                         onChange={(html) => {
+                          // Marquer que l'utilisateur est en train de taper
+                          isTypingRef.current = true
                           setClipboardText(html)
+
+                          // Réinitialiser isTyping après 3 secondes d'inactivité
+                          if (saveTimerRef.current) {
+                            clearTimeout(saveTimerRef.current)
+                          }
+                          setTimeout(() => {
+                            isTypingRef.current = false
+                          }, 3000)
+
                           debouncedSave(html)
                         }}
                         placeholder="Commencez à taper..."
@@ -854,7 +1049,18 @@ export default function ClipboardViewPage() {
                             placeholder="# Titre&#10;&#10;**Gras** *Italique*"
                             value={clipboardText}
                             onChange={(e) => {
+                              // Marquer que l'utilisateur est en train de taper
+                              isTypingRef.current = true
                               setClipboardText(e.target.value)
+
+                              // Réinitialiser isTyping après 3 secondes d'inactivité
+                              if (saveTimerRef.current) {
+                                clearTimeout(saveTimerRef.current)
+                              }
+                              setTimeout(() => {
+                                isTypingRef.current = false
+                              }, 3000)
+
                               debouncedSave(e.target.value)
                             }}
                             className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"
@@ -872,7 +1078,18 @@ export default function ClipboardViewPage() {
                         placeholder="Commencez à taper..."
                         value={clipboardText}
                         onChange={(e) => {
+                          // Marquer que l'utilisateur est en train de taper
+                          isTypingRef.current = true
                           setClipboardText(e.target.value)
+
+                          // Réinitialiser isTyping après 3 secondes d'inactivité
+                          if (saveTimerRef.current) {
+                            clearTimeout(saveTimerRef.current)
+                          }
+                          setTimeout(() => {
+                            isTypingRef.current = false
+                          }, 3000)
+
                           debouncedSave(e.target.value)
                         }}
                         className="min-h-[300px] md:min-h-[500px] font-mono text-sm resize-none"

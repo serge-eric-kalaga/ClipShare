@@ -31,7 +31,7 @@ import {
     Heading3,
     Minus,
 } from 'lucide-react'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 
 export default function RichTextEditor({ content, onChange, placeholder }) {
     const editor = useEditor({
@@ -66,6 +66,17 @@ export default function RichTextEditor({ content, onChange, placeholder }) {
             },
         },
     })
+
+    // Mettre à jour le contenu de l'éditeur quand la prop content change (Socket.IO)
+    useEffect(() => {
+        if (editor && content !== undefined && content !== null) {
+            const currentContent = editor.getHTML()
+            // Ne mettre à jour que si le contenu est différent pour éviter les boucles
+            if (currentContent !== content) {
+                editor.commands.setContent(content, false)
+            }
+        }
+    }, [content, editor])
 
     const setLink = useCallback(() => {
         const previousUrl = editor.getAttributes('link').href
