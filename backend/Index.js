@@ -152,7 +152,7 @@ io.on('connection', (socket) => {
 
       // Emit to clipboard room
       io.to(clipboardId).emit('clipboard:viewers', { clipboardId, active, totalViews });
-      
+
       // Also emit to owner's user room so dashboard sees active viewers
       if (updated?.owner) {
         const ownerId = updated.owner.toString();
@@ -178,12 +178,12 @@ io.on('connection', (socket) => {
         console.error('Error fetching clipboard for leaveClipboard', err);
       }
       const totalViews = clip?.visits || 0;
-      
+
       console.log(`[leaveClipboard] clipboardId: ${clipboardId}, active: ${active}, totalViews: ${totalViews}`);
-      
+
       // Emit to clipboard room
       io.to(clipboardId).emit('clipboard:viewers', { clipboardId, active, totalViews });
-      
+
       // Also emit to owner's user room so dashboard sees viewers leaving
       if (clip?.owner) {
         const ownerId = clip.owner.toString();
@@ -200,21 +200,21 @@ io.on('connection', (socket) => {
     try {
       const rooms = Array.from(socket.rooms || []);
       console.log('[disconnect] Processing rooms:', rooms);
-      
+
       for (const roomId of rooms) {
         // socket.rooms contains its own id as well - skip
         if (roomId === socket.id) continue;
         // Skip user rooms (they start with "user:")
         if (roomId.startsWith('user:')) continue;
-        
+
         const room = io.sockets.adapter.rooms.get(roomId);
         const active = room ? room.size : 0;
-        
+
         console.log(`[disconnect] clipboardId: ${roomId}, active: ${active}`);
-        
+
         // Emit to clipboard room
         io.to(roomId).emit('clipboard:viewers', { clipboardId: roomId, active, totalViews: null });
-        
+
         // Also emit to owner's user room - need to fetch clipboard to get owner
         try {
           const clip = await Clipboard.findById(roomId);
