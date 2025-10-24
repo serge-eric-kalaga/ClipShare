@@ -1174,22 +1174,70 @@ export default function DashboardPage() {
     })
   }
 
-  const handleDeleteClipboard = (clipboardId) => {
-    const history = localStorage.getItem("clipboard_history")
-    if (history) {
-      let historyArray = JSON.parse(history)
-      historyArray = historyArray.filter((item) => item.id !== clipboardId)
-      localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
-      setClipboardHistory(historyArray)
+  const handleDeleteClipboard = async (clipboardId) => {
+    // Vérifier si c'est un clipboard avec ID valide (pas local_)
+    if (clipboardId && !clipboardId.startsWith("local_") && /^[a-f0-9]{24}$/i.test(clipboardId)) {
+      // Clipboard backend : supprimer via API
+      try {
+        const config = user ? {
+          headers: { Authorization: `Bearer ${user.access_token}` },
+        } : {}
 
-      if (clipboardId === currentClipboardId) {
-        generateNewClipboard()
+        await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/clipboards/${clipboardId}`, config)
+
+        // Mettre à jour l'interface
+        setClipboardHistory((prev) => prev.filter((item) => item.id !== clipboardId))
+
+        // Si c'est le clipboard actuel, en créer un nouveau
+        if (clipboardId === currentClipboardId) {
+          generateNewClipboard()
+        }
+
+        // Quitter la room socket si on était dedans
+        try {
+          if (socketRef.current && joinedClipboardRef.current === clipboardId) {
+            socketRef.current.emit('leaveClipboard', { clipboardId })
+            joinedClipboardRef.current = null
+          }
+        } catch (err) {
+          console.error('Error leaving clipboard room on delete', err)
+        }
+
+        toast({
+          title: "Clipboard supprimé",
+          description: "Le clipboard et ses fichiers ont été supprimés définitivement",
+        })
+
+        // Recharger l'historique si connecté
+        if (user) {
+          loadClipboardHistory()
+        }
+      } catch (error) {
+        console.error("Erreur suppression clipboard:", error)
+        toast({
+          title: "Erreur",
+          description: error.response?.data?.message || "Impossible de supprimer le clipboard",
+          variant: "destructive",
+        })
       }
+    } else {
+      // Clipboard local : supprimer uniquement du localStorage
+      const history = localStorage.getItem("clipboard_history")
+      if (history) {
+        let historyArray = JSON.parse(history)
+        historyArray = historyArray.filter((item) => item.id !== clipboardId)
+        localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+        setClipboardHistory(historyArray)
 
-      toast({
-        title: "Clipboard supprimé",
-        description: "Le clipboard a été supprimé de l'historique",
-      })
+        if (clipboardId === currentClipboardId) {
+          generateNewClipboard()
+        }
+
+        toast({
+          title: "Clipboard supprimé",
+          description: "Le clipboard a été supprimé de l'historique local",
+        })
+      }
     }
   }
 

@@ -177,16 +177,22 @@ module.exports = {
 
             await Clipboard.findByIdAndDelete(clipboardId);
 
-            // Supprimer les fichiers associés si présents le dossier `uploads`
+            // Supprimer les fichiers associés du dossier `uploads`
             if (entry.files && entry.files.length > 0) {
                 const fs = require("fs");
                 const path = require("path");
 
-                entry.files.forEach(filePath => {
-                    const fullPath = path.join(__dirname, "..", filePath);
+                entry.files.forEach(fileUrl => {
+                    // fileUrl est de la forme "/uploads/filename.ext"
+                    // On retire le "/" initial et on construit le chemin complet
+                    const relativePath = fileUrl.startsWith('/') ? fileUrl.substring(1) : fileUrl;
+                    const fullPath = path.join(__dirname, "..", relativePath);
+
                     fs.unlink(fullPath, (err) => {
                         if (err) {
                             console.error(`Erreur lors de la suppression du fichier ${fullPath}:`, err);
+                        } else {
+                            console.log(`Fichier supprimé avec succès: ${fullPath}`);
                         }
                     });
                 });
@@ -196,7 +202,14 @@ module.exports = {
             try {
                 const io = req.app && req.app.get && req.app.get('io');
                 if (io) {
+                    // Émettre à la room du clipboard
                     io.to(clipboardId.toString()).emit('clipboard:deleted', { clipboardId });
+
+                    // Émettre aussi à la room de l'utilisateur pour mettre à jour son dashboard
+                    if (entry.owner) {
+                        const ownerId = entry.owner.toString();
+                        io.to(`user:${ownerId}`).emit('clipboard:deleted', { clipboardId });
+                    }
                 }
             } catch (err) {
                 console.error('Error emitting clipboard:deleted', err);
