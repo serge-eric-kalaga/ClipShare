@@ -487,8 +487,29 @@ export default function ClipboardViewPage() {
             // Update security settings in real-time
             password: clipData.password,
             readOnly: clipData.readOnly,
-            expireAt: clipData.expireAt,
+            expiresAt: clipData.expireAt || clipData.expiresAt,
           }))
+
+          // Update localStorage to avoid overwriting changes from dashboard
+          const savedClipboard = localStorage.getItem("current_clipboard")
+          if (savedClipboard) {
+            try {
+              const clipboardData = JSON.parse(savedClipboard)
+              if (clipboardData.id === params.id) {
+                clipboardData.text = clipData.content || clipData.text || ""
+                clipboardData.content = clipData.content || clipData.text || ""
+                clipboardData.title = clipData.title || clipboardData.title
+                clipboardData.files = clipData.files || []
+                clipboardData.password = clipData.password || ""
+                clipboardData.readOnly = clipData.readOnly || false
+                clipboardData.expiresAt = clipData.expireAt || clipData.expiresAt || null
+                clipboardData.updatedAt = clipData.updatedAt
+                localStorage.setItem("current_clipboard", JSON.stringify(clipboardData))
+              }
+            } catch (err) {
+              console.error('Error updating localStorage from socket', err)
+            }
+          }
 
           // Show notification for read-only mode
           if (becameReadOnly) {
@@ -872,13 +893,7 @@ export default function ClipboardViewPage() {
                 <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/10 border border-orange-500/20 text-xs">
                   <Clock className="h-3 w-3 text-orange-600" />
                   <span className="text-orange-600">
-                    Expire le {new Date(clipboard.expireAt).toLocaleDateString("fr-FR", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
+                    Expire le {formatDate(clipboard.expireAt)}
                   </span>
                 </div>
               )}

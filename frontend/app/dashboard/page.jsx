@@ -35,6 +35,7 @@ import {
   Infinity,
   ChevronLeft,
   ChevronRight,
+  CalendarIcon,
 } from "lucide-react"
 import { io as socketIoClient } from "socket.io-client"
 import QRCodeDisplay from "@/components/qr-code-display"
@@ -51,6 +52,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReactMarkdown from "react-markdown"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -109,6 +111,10 @@ export default function DashboardPage() {
   const [socketConnected, setSocketConnected] = useState(false)
   // Track if we just received a socket update to avoid reloading from API
   const recentSocketUpdateRef = useRef(false)
+
+  // Date picker state for expiration
+  const [expirationDate, setExpirationDate] = useState(null)
+  const [expirationTime, setExpirationTime] = useState("23:59")
 
   // Fonction pour vérifier si le clipboard actuel est vide
   const isCurrentClipboardEmpty = () => {
@@ -209,13 +215,25 @@ export default function DashboardPage() {
       setCurrentClipboardId(clipboard.id || "")
       setClipboardTitle(clipboard.title || "")
       setClipboardPassword(clipboard.password || "")
-      setClipboardExpiration(clipboard.expiration || "never")
       setClipboardReadOnly(clipboard.readOnly || false)
       setContentType(clipboard.contentType || "text")
       setUploadedFiles(clipboard.files || [])
       setMarkdownMode(clipboard.markdownMode || false)
       setClipboardCreatedAt(clipboard.createdAt || "")
       setClipboardUpdatedAt(clipboard.updatedAt || "")
+
+      // Load expiration date and time - check expiresAt, expiration, or expireAt
+      const expireAtValue = clipboard.expiresAt || clipboard.expiration || clipboard.expireAt
+      if (expireAtValue) {
+        const expireDate = new Date(expireAtValue)
+        setExpirationDate(expireDate)
+        setExpirationTime(
+          `${expireDate.getHours().toString().padStart(2, '0')}:${expireDate.getMinutes().toString().padStart(2, '0')}`
+        )
+        setClipboardExpiration(expireAtValue)
+      } else {
+        setClipboardExpiration("never")
+      }
     }
     // NE PAS créer de clipboard automatiquement
     // Il sera créé lors de la première saisie de texte
@@ -370,10 +388,23 @@ export default function DashboardPage() {
           setClipboardTitle(mapped.title)
           setUploadedFiles(mapped.files || [])
           setClipboardPassword(mapped.password || "")
-          setClipboardExpiration(mapped.expiration || "never")
           setClipboardReadOnly(mapped.readOnly || false)
           setClipboardCreatedAt(mapped.createdAt || "")
           setClipboardUpdatedAt(mapped.updatedAt || "")
+
+          // Update expiration date and time
+          if (mapped.expiration) {
+            const expireDate = new Date(mapped.expiration)
+            setExpirationDate(expireDate)
+            setExpirationTime(
+              `${expireDate.getHours().toString().padStart(2, '0')}:${expireDate.getMinutes().toString().padStart(2, '0')}`
+            )
+            setClipboardExpiration(mapped.expiration)
+          } else {
+            setExpirationDate(null)
+            setExpirationTime("23:59")
+            setClipboardExpiration("never")
+          }
         }
       })
 
@@ -830,16 +861,21 @@ export default function DashboardPage() {
     if (savedClipboard) {
       const clipboard = JSON.parse(savedClipboard)
       clipboard.password = clipboardPassword
-      clipboard.expiration = clipboardExpiration
       clipboard.readOnly = clipboardReadOnly
       clipboard.updatedAt = new Date().toISOString()
 
-      if (clipboardExpiration !== "never" && clipboardExpiration) {
-        const now = new Date()
-        const hours = Number.parseInt(clipboardExpiration)
-        clipboard.expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString()
+      // Calculate expireAt from date + time picker
+      if (expirationDate) {
+        const [hours, minutes] = expirationTime.split(':')
+        const expireDateTime = new Date(expirationDate)
+        expireDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+        clipboard.expiresAt = expireDateTime.toISOString()
+        clipboard.expiration = expireDateTime.toISOString()
+        setClipboardExpiration(expireDateTime.toISOString())
       } else {
         clipboard.expiresAt = null
+        clipboard.expiration = null
+        setClipboardExpiration("never")
       }
 
       localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
@@ -1067,13 +1103,28 @@ export default function DashboardPage() {
     setCurrentClipboardId(clipboard.id || "")
     setClipboardTitle(clipboard.title || "")
     setClipboardPassword(clipboard.password || "")
-    setClipboardExpiration(clipboard.expiration || "never")
     setClipboardReadOnly(clipboard.readOnly || false)
     setContentType(clipboard.contentType || "text")
     setUploadedFiles(clipboard.files || [])
     setMarkdownMode(clipboard.markdownMode || false)
     setClipboardCreatedAt(clipboard.createdAt || "")
     setClipboardUpdatedAt(clipboard.updatedAt || "")
+
+    // Load expiration date and time - check expiresAt, expiration, or expireAt
+    const expireAtValue = clipboard.expiresAt || clipboard.expiration || clipboard.expireAt
+    if (expireAtValue) {
+      const expireDate = new Date(expireAtValue)
+      setExpirationDate(expireDate)
+      setExpirationTime(
+        `${expireDate.getHours().toString().padStart(2, '0')}:${expireDate.getMinutes().toString().padStart(2, '0')}`
+      )
+      setClipboardExpiration(expireAtValue)
+    } else {
+      setExpirationDate(null)
+      setExpirationTime("23:59")
+      setClipboardExpiration("never")
+    }
+
     localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
     // Manage socket rooms: leave previous clipboard room and join the new one
     try {
@@ -1780,19 +1831,65 @@ export default function DashboardPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="expiration" className="text-sm">
-                                Expiration
+                                Date d'expiration
                               </Label>
-                              <Select value={clipboardExpiration} onValueChange={setClipboardExpiration}>
-                                <SelectTrigger id="expiration">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="never">Jamais</SelectItem>
-                                  <SelectItem value="1">1 heure</SelectItem>
-                                  <SelectItem value="24">24 heures</SelectItem>
-                                  <SelectItem value="168">7 jours</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    id="expiration"
+                                    variant="outline"
+                                    className="w-full justify-start text-left font-normal"
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {expirationDate ? (
+                                      new Date(expirationDate).toLocaleDateString("fr-FR", {
+                                        day: "2-digit",
+                                        month: "long",
+                                        year: "numeric",
+                                      })
+                                    ) : (
+                                      <span className="text-muted-foreground">Pas d'expiration</span>
+                                    )}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={expirationDate}
+                                    onSelect={setExpirationDate}
+                                    disabled={(date) => date < new Date()}
+                                    initialFocus
+                                  />
+                                  {expirationDate && (
+                                    <div className="p-3 border-t">
+                                      <Label htmlFor="time" className="text-xs mb-1 block">
+                                        Heure
+                                      </Label>
+                                      <Input
+                                        id="time"
+                                        type="time"
+                                        value={expirationTime}
+                                        onChange={(e) => setExpirationTime(e.target.value)}
+                                        className="w-full"
+                                      />
+                                      <div className="flex gap-2 mt-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="flex-1"
+                                          onClick={() => {
+                                            setExpirationDate(null)
+                                            setExpirationTime("23:59")
+                                          }}
+                                        >
+                                          <X className="h-3 w-3 mr-1" />
+                                          Effacer
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </PopoverContent>
+                              </Popover>
                             </div>
                             <div className="flex items-center space-x-2">
                               <input
@@ -2068,7 +2165,7 @@ export default function DashboardPage() {
                         ) : (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Expire le {formatDate(clipboardExpiration)} heure(s)
+                            Expire le {formatDate(clipboardExpiration)}
                           </span>
                         )}
                       </div>
