@@ -442,7 +442,7 @@ export default function DashboardPage() {
                 ...c,
                 views: totalViews != null ? totalViews : c.views,
                 // create placeholder active viewers array so UI can display a count
-                activeViewers: Array.from({ length: active || 0 }).map((_, i) => ({ name: `Viewer ${i + 1}`, color: '#777' })),
+                activeViewers: Array.from({ length: active || 0 }).map((_, i) => ({ name: `${generateViewerName()}`, gradient: randomGradient() })),
               }
             }
             return c
@@ -778,6 +778,42 @@ export default function DashboardPage() {
           variant: "destructive",
         })
       })
+  }
+
+  function generateViewerName() {
+    const adjectives = ["Curious", "Silent", "Anonymous", "Stealthy", "Inquisitive", "Wandering", "Observant", "Quiet", "Cautious", "Watchful", "Sly", "Clever", "Swift", "Brave", "Fierce", "Nimble", "Wise", "Bold"]
+    const nouns = ["Fox", "Owl", "Cat", "Wolf", "Eagle", "Hawk", "Tiger", "Panther", "Lion", "Bear", "Shark", "Dolphin", "Raven", "Dragon", "Griffin", "Unicorn", "Phoenix", "Leopard", "Cheetah", "Jaguar", "Cougar"]
+    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
+    const noun = nouns[Math.floor(Math.random() * nouns.length)]
+    return `${adjective} ${noun}`
+  }
+
+  function randomGradient() {
+    const colors = [
+      'from-pink-500 to-yellow-500',
+      'from-purple-500 to-indigo-500',
+      'from-green-400 to-blue-500',
+      'from-red-400 to-pink-500',
+      'from-yellow-400 to-red-500',
+      'from-blue-400 to-purple-500',
+      'from-teal-400 to-cyan-500',
+      'from-gray-400 to-black',
+      'from-indigo-400 to-purple-500',
+      'from-emerald-400 to-teal-500',
+      'from-rose-400 to-pink-500',
+      'from-fuchsia-400 to-purple-500',
+      'from-violet-400 to-indigo-500',
+      'from-sky-400 to-blue-500',
+      'from-lime-400 to-green-500',
+      'from-amber-400 to-yellow-500',
+      'from-cyan-400 to-sky-500',
+      'from-pink-400 to-rose-500',
+      'from-purple-400 to-fuchsia-500',
+      'from-blue-400 to-indigo-500',
+      'from-green-400 to-emerald-500',
+      'from-red-400 to-amber-500',
+    ]
+    return colors[Math.floor(Math.random() * colors.length)]
   }
 
 
@@ -2228,10 +2264,10 @@ export default function DashboardPage() {
                         getClipboardStats(currentClipboardId).activeViewers.map((viewer, index) => (
                           <div
                             key={index}
-                            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md"
-                            title={viewer.name || `Viewer ${index + 1}`}
+                            className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold bg-gradient-to-br ${viewer.gradient || 'from-blue-500 to-purple-500'} text-white shadow-md`}
+                            title={viewer.name || `${generateViewerName()}`}
                           >
-                            {(viewer.name || `V${index + 1}`).charAt(0).toUpperCase()}
+                            {(viewer.name || `${generateViewerName()}`).charAt(0).toUpperCase()}
                           </div>
                         ))
                       ) : (

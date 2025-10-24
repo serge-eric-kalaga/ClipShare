@@ -545,7 +545,7 @@ export default function ClipboardViewPage() {
           console.log('[clipboard:viewers] Updating active viewers:', active)
           setActiveViewers(
             Array.from({ length: active || 0 }).map((_, i) => ({
-              name: `Viewer ${i + 1}`,
+              name: `${generateViewerName()}`,
               color: generateRandomColor(),
             }))
           )
