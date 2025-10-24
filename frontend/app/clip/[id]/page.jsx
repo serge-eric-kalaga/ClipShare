@@ -99,7 +99,7 @@ export default function ClipboardViewPage() {
         }
 
         // MISE À JOUR : _id en query parameter ET dans le body (comme dans le dashboard)
-        const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${params.id}`
+        const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${params.id}`
         const config = {
           headers: {
             "Content-Type": "application/json",
@@ -642,6 +642,7 @@ export default function ClipboardViewPage() {
       })
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
+      console.log("Erreur copie URL:", err)
       toast({
         title: <span className="font-semibold text-red-600">Erreur</span>,
         description: "Impossible de copier l'URL",
@@ -666,6 +667,7 @@ export default function ClipboardViewPage() {
         description: "Le contenu a été copié dans le presse-papiers",
       })
     } catch (err) {
+      console.log("Erreur copie URL:", err)
       toast({
         title: <span className="font-semibold text-red-600">Erreur</span>,
         description: "Impossible de copier le contenu",

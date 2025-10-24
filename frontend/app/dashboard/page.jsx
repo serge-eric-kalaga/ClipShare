@@ -171,7 +171,7 @@ export default function DashboardPage() {
     if (!guest && currentUser) {
       // Utilisateur connecté : charger depuis l'API avec pagination
       axios
-        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?page=1&limit=${itemsPerPage}`, {
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${currentUser?.id}&page=${currentPage}&limit=${itemsPerPage}`, {
           headers: { Authorization: `Bearer ${currentUser?.access_token}` },
         })
         .then((response) => {
@@ -257,7 +257,7 @@ export default function DashboardPage() {
     // Charger l'historique selon le statut de l'utilisateur
     if (!isGuest && user) {
       axios
-        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?page=${currentPage}&limit=${itemsPerPage}`, {
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${currentUser?.id}&page=${currentPage}&limit=${itemsPerPage}`, {
           headers: { Authorization: `Bearer ${user?.access_token}` },
         })
         .then((response) => {
@@ -742,7 +742,7 @@ export default function DashboardPage() {
     }
 
     // MISE À JOUR : _id en query parameter ET dans le body
-    const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${clipboard.id}`
+    const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${clipboard.id}`
     const config = user ? {
       headers: { Authorization: `Bearer ${user?.access_token}` },
     } : {}
@@ -1243,17 +1243,50 @@ export default function DashboardPage() {
 
   const handleCopyUrl = async () => {
     try {
-      await navigator.clipboard.writeText(clipboardUrl)
-      setCopied(true)
-      toast({
-        title: "URL copiée",
-        description: "L'URL a été copiée dans votre clipboard",
-      })
-      setTimeout(() => setCopied(false), 2000)
+      // Vérifier si l'API Clipboard est disponible
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(clipboardUrl)
+        setCopied(true)
+        toast({
+          title: "URL copiée",
+          description: "L'URL a été copiée dans votre clipboard",
+        })
+        setTimeout(() => setCopied(false), 2000)
+      } else {
+        // Fallback pour navigateurs anciens ou contextes non sécurisés
+        const textArea = document.createElement("textarea")
+        textArea.value = clipboardUrl
+        textArea.style.position = "fixed"
+        textArea.style.left = "-999999px"
+        textArea.style.top = "-999999px"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+
+        try {
+          document.execCommand('copy')
+          setCopied(true)
+          toast({
+            title: "URL copiée",
+            description: "L'URL a été copiée dans votre clipboard",
+          })
+          setTimeout(() => setCopied(false), 2000)
+        } catch (err) {
+          console.error("Erreur execCommand:", err)
+          toast({
+            title: "Erreur",
+            description: "Impossible de copier l'URL. Veuillez la copier manuellement.",
+            variant: "destructive",
+          })
+        } finally {
+          document.body.removeChild(textArea)
+        }
+      }
     } catch (err) {
+      console.error("Erreur copie URL:", err)
       toast({
         title: "Erreur",
-        description: "Impossible de copier l'URL",
+        description: "Impossible de copier l'URL. Veuillez la copier manuellement.",
         variant: "destructive",
       })
     }
@@ -1477,15 +1510,46 @@ export default function DashboardPage() {
 
   const handleCopyContent = async () => {
     try {
-      await navigator.clipboard.writeText(clipboardText)
-      toast({
-        title: "Contenu copié",
-        description: "Le texte a été copié dans votre presse-papier",
-      })
+      // Vérifier si l'API Clipboard est disponible
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(clipboardText)
+        toast({
+          title: "Contenu copié",
+          description: "Le texte a été copié dans votre presse-papier",
+        })
+      } else {
+        // Fallback pour navigateurs anciens ou contextes non sécurisés
+        const textArea = document.createElement("textarea")
+        textArea.value = clipboardText
+        textArea.style.position = "fixed"
+        textArea.style.left = "-999999px"
+        textArea.style.top = "-999999px"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+
+        try {
+          document.execCommand('copy')
+          toast({
+            title: "Contenu copié",
+            description: "Le texte a été copié dans votre presse-papier",
+          })
+        } catch (err) {
+          console.error("Erreur execCommand:", err)
+          toast({
+            title: "Erreur",
+            description: "Impossible de copier le contenu. Veuillez le copier manuellement.",
+            variant: "destructive",
+          })
+        } finally {
+          document.body.removeChild(textArea)
+        }
+      }
     } catch (err) {
+      console.error("Erreur copie contenu:", err)
       toast({
         title: "Erreur",
-        description: "Impossible de copier le contenu",
+        description: "Impossible de copier le contenu. Veuillez le copier manuellement.",
         variant: "destructive",
       })
     }

@@ -237,7 +237,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, "0.0.0.0", async () => {
-  console.log(`App running on http://localhost:${PORT}`);
+  console.log(`App running on http://${process.env.HOST}:${PORT}`);
 
   setTimeout(async () => {
     await connect_db();
