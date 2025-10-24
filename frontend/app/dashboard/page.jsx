@@ -102,6 +102,8 @@ export default function DashboardPage() {
   const saveTimerRef = useRef(null)
   // Track recent save to avoid showing notification for our own changes
   const recentSaveRef = useRef(false)
+  // Track if a clipboard creation is in progress
+  const isCreatingClipboardRef = useRef(false)
 
   // Socket.io client ref
   const socketRef = useRef(null)
@@ -198,6 +200,11 @@ export default function DashboardPage() {
         })
         .catch((err) => {
           console.error("Erreur chargement historique:", err)
+          toast({
+            title: "Erreur",
+            description: err?.response?.data?.message || "Une erreur est survenue lors du chargement de l'historique",
+            variant: "destructive",
+          })
         })
     } else {
       // Invité : charger depuis localStorage
@@ -282,6 +289,11 @@ export default function DashboardPage() {
         })
         .catch((err) => {
           console.error("Erreur chargement historique:", err)
+          toast({
+            title: "Erreur",
+            description: err?.response?.data?.message || "Une erreur est survenue lors du chargement de l'historique",
+            variant: "destructive",
+          })
         })
     } else {
       // Invité : charger depuis localStorage
@@ -666,15 +678,10 @@ export default function DashboardPage() {
   }
 
   const saveToHistory = (clipboard) => {
-    // Ne pas sauvegarder si l'ID est manquant ou invalide
-    if (!clipboard.id) {
-      console.warn("Cannot save clipboard without ID")
-      return
-    }
-
     // Vérifier si c'est un clipboard local (créé par un invité ou avec préfixe local_)
     // OU si l'ID n'est pas un ObjectId valide (pas 24 caractères hexadécimaux)
-    const isLocalClipboard = clipboard.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(clipboard.id)
+    // OU si l'ID est null (clipboard temporaire)
+    const isLocalClipboard = !clipboard.id || clipboard.id.startsWith("local_") || !/^[a-f0-9]{24}$/i.test(clipboard.id)
 
     // Si c'est un clipboard local, créer un nouveau clipboard sur le backend
     if (isLocalClipboard) {
@@ -764,6 +771,12 @@ export default function DashboardPage() {
       })
       .catch((err) => {
         console.error("Erreur mise à jour clipboard:", err)
+        localStorage.removeItem("current_clipboard")
+        toast({
+          title: "Erreur",
+          description: err?.response?.data?.message || "Une erreur est survenue lors de la sauvegarde",
+          variant: "destructive",
+        })
       })
   }
 
@@ -915,76 +928,48 @@ export default function DashboardPage() {
     const newText = e.target.value
     setClipboardText(newText)
 
-    // Si pas de clipboard existant, en créer un d'abord
-    if (!currentClipboardId) {
-      // Créer sur le serveur (avec ou sans authentification)
-      const payload = {
-        title: clipboardTitle || "Sans titre",
-        content: newText,
-        files: [],
-        password: null,
-        expireAt: null,
-        readOnly: false,
-      }
+    const savedClipboard = localStorage.getItem("current_clipboard")
 
-      const config = user ? {
-        headers: { Authorization: `Bearer ${user?.access_token}` },
-      } : {}
-
-      axios
-        .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, config)
-        .then((response) => {
-          const saved = response.data?.data || response.data
-          const id = saved?._id
-          const url = `${window.location.origin}/clip/${id}`
-
-          const createdAt = saved.createdAt || new Date().toISOString()
-          const updatedAt = saved.updatedAt || new Date().toISOString()
-
-          setClipboardUrl(url)
-          setCurrentClipboardId(id)
-          setClipboardCreatedAt(createdAt)
-          setClipboardUpdatedAt(updatedAt)
-
-          const clipboard = {
-            id,
-            url,
-            text: newText,
-            title: clipboardTitle || "Sans titre",
-            isFavorite: false,
-            password: "",
-            expiration: null,
-            readOnly: false,
-            contentType: "text",
-            files: [],
-            markdownMode: markdownMode,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            views: 0,
-            lastViewed: null,
-            activeViewers: [],
-          }
-
-          localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-        })
-        .catch((err) => {
-          console.error("Erreur création clipboard:", err)
-        })
-    } else {
+    if (savedClipboard) {
       // Clipboard existe déjà : mise à jour localStorage et debounce
-      const savedClipboard = localStorage.getItem("current_clipboard")
-      if (savedClipboard) {
-        const clipboard = JSON.parse(savedClipboard)
-        clipboard.text = newText
-        clipboard.markdownMode = markdownMode
-        const newUpdatedAt = new Date().toISOString()
-        clipboard.updatedAt = newUpdatedAt
-        setClipboardUpdatedAt(newUpdatedAt)
-        localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+      const clipboard = JSON.parse(savedClipboard)
+      clipboard.text = newText
+      clipboard.markdownMode = markdownMode
+      const newUpdatedAt = new Date().toISOString()
+      clipboard.updatedAt = newUpdatedAt
+      setClipboardUpdatedAt(newUpdatedAt)
+      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
 
-        // AUTO-SAVE après 2 secondes
-        debouncedSave()
+      // AUTO-SAVE après 2 secondes
+      debouncedSave()
+    } else if (!currentClipboardId) {
+      // Créer un clipboard local temporaire
+      const createdAt = new Date().toISOString()
+      const clipboard = {
+        id: null, // Sera défini après création sur le serveur
+        url: null,
+        text: newText,
+        title: clipboardTitle || "Sans titre",
+        isFavorite: false,
+        password: "",
+        expiration: null,
+        readOnly: false,
+        contentType: "text",
+        files: [],
+        markdownMode: markdownMode,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+        views: 0,
+        lastViewed: null,
+        activeViewers: [],
       }
+
+      localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+      setClipboardCreatedAt(createdAt)
+      setClipboardUpdatedAt(createdAt)
+
+      // AUTO-SAVE après 2 secondes (créera sur le serveur)
+      debouncedSave()
     }
   }
 
@@ -1680,7 +1665,7 @@ export default function DashboardPage() {
                               {clipboard.views || 0} vue(s)
                               {clipboard.activeViewers && clipboard.activeViewers.length > 0 && (
                                 <span className="ml-2 text-green-600">
-                                  • {clipboard.activeViewers.length} en ligne
+                                  • {clipboard.activeViewers.length - 1} en ligne
                                 </span>
                               )}
                               {clipboard.lastViewed && ` • Dernière vue: ${formatDate(clipboard.lastViewed)}`}
@@ -1994,6 +1979,7 @@ export default function DashboardPage() {
                           onChange={(html) => {
                             setClipboardText(html)
                             const savedClipboard = localStorage.getItem("current_clipboard")
+
                             if (savedClipboard) {
                               const clipboard = JSON.parse(savedClipboard)
                               clipboard.text = html
@@ -2003,53 +1989,33 @@ export default function DashboardPage() {
                               localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
                               debouncedSave()
                             } else if (!currentClipboardId) {
-                              // Créer un nouveau clipboard si nécessaire
-                              const payload = {
+                              // Créer un clipboard local temporaire
+                              const createdAt = new Date().toISOString()
+                              const clipboard = {
+                                id: null, // Sera défini après création sur le serveur
+                                url: null,
+                                text: html,
                                 title: clipboardTitle || "Sans titre",
-                                content: html,
-                                files: [],
-                                password: null,
-                                expireAt: null,
+                                isFavorite: false,
+                                password: "",
+                                expiration: null,
                                 readOnly: false,
+                                contentType: "text",
+                                files: [],
+                                markdownMode: false,
+                                createdAt: createdAt,
+                                updatedAt: createdAt,
+                                views: 0,
+                                lastViewed: null,
+                                activeViewers: [],
                               }
-                              const config = user ? {
-                                headers: { Authorization: `Bearer ${user?.access_token}` },
-                              } : {}
-                              axios
-                                .post(`${process.env.NEXT_PUBLIC_API_URL}/clipboards`, payload, config)
-                                .then((response) => {
-                                  const saved = response.data?.data || response.data
-                                  const id = saved?._id
-                                  const url = `${window.location.origin}/clip/${id}`
-                                  const createdAt = saved.createdAt || new Date().toISOString()
-                                  const updatedAt = saved.updatedAt || new Date().toISOString()
-                                  setClipboardUrl(url)
-                                  setCurrentClipboardId(id)
-                                  setClipboardCreatedAt(createdAt)
-                                  setClipboardUpdatedAt(updatedAt)
-                                  const clipboard = {
-                                    id,
-                                    url,
-                                    text: html,
-                                    title: clipboardTitle || "Sans titre",
-                                    isFavorite: false,
-                                    password: "",
-                                    expiration: null,
-                                    readOnly: false,
-                                    contentType: "text",
-                                    files: [],
-                                    markdownMode: false,
-                                    createdAt: createdAt,
-                                    updatedAt: updatedAt,
-                                    views: 0,
-                                    lastViewed: null,
-                                    activeViewers: [],
-                                  }
-                                  localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
-                                })
-                                .catch((err) => {
-                                  console.error("Erreur création clipboard:", err)
-                                })
+
+                              localStorage.setItem("current_clipboard", JSON.stringify(clipboard))
+                              setClipboardCreatedAt(createdAt)
+                              setClipboardUpdatedAt(createdAt)
+
+                              // AUTO-SAVE après 2 secondes (créera sur le serveur)
+                              debouncedSave()
                             }
                           }}
                           placeholder="Commencez à taper ou collez votre texte ici..."

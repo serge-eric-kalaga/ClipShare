@@ -185,7 +185,7 @@ export default function ClipboardViewPage() {
         } catch (error) {
           console.error("Erreur upload fichier:", error)
           toast({
-            title: "Erreur",
+            title: <span className="font-semibold text-red-600">Erreur</span>,
             description: error.response?.data?.message || `Impossible de télécharger ${file.name}`,
             variant: "destructive",
           })
@@ -643,7 +643,7 @@ export default function ClipboardViewPage() {
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       toast({
-        title: "Erreur",
+        title: <span className="font-semibold text-red-600">Erreur</span>,
         description: "Impossible de copier l'URL",
         variant: "destructive",
       })
@@ -667,7 +667,7 @@ export default function ClipboardViewPage() {
       })
     } catch (err) {
       toast({
-        title: "Erreur",
+        title: <span className="font-semibold text-red-600">Erreur</span>,
         description: "Impossible de copier le contenu",
         variant: "destructive",
       })
@@ -917,7 +917,7 @@ export default function ClipboardViewPage() {
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 border border-green-500/20">
                   <Users className="h-3 w-3 text-green-600" />
                   <span className="text-[10px] md:text-xs font-medium text-green-600">
-                    {activeViewers.length + 1} en ligne
+                    {activeViewers.length} en ligne
                   </span>
                 </div>
               )}

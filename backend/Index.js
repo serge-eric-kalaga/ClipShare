@@ -195,11 +195,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', async () => {
-    // When a socket disconnects, emit updated counts for rooms it was in
+  socket.on('disconnecting', async () => {
+    // When a socket is disconnecting (BEFORE it leaves rooms), emit updated counts
     try {
       const rooms = Array.from(socket.rooms || []);
-      console.log('[disconnect] Processing rooms:', rooms);
+      console.log('[disconnecting] Processing rooms:', rooms);
 
       for (const roomId of rooms) {
         // socket.rooms contains its own id as well - skip
@@ -207,10 +207,11 @@ io.on('connection', (socket) => {
         // Skip user rooms (they start with "user:")
         if (roomId.startsWith('user:')) continue;
 
+        // The socket is still in the room, so we need to subtract 1 from the count
         const room = io.sockets.adapter.rooms.get(roomId);
-        const active = room ? room.size : 0;
+        const active = room ? room.size - 1 : 0;
 
-        console.log(`[disconnect] clipboardId: ${roomId}, active: ${active}`);
+        console.log(`[disconnecting] clipboardId: ${roomId}, active after disconnect: ${active}`);
 
         // Emit to clipboard room
         io.to(roomId).emit('clipboard:viewers', { clipboardId: roomId, active, totalViews: null });
@@ -222,15 +223,15 @@ io.on('connection', (socket) => {
             const ownerId = clip.owner.toString();
             // Fetch totalViews for accuracy
             const totalViews = clip.visits || 0;
-            console.log(`[disconnect] Emitting to owner room: user:${ownerId}`);
+            console.log(`[disconnecting] Emitting to owner room: user:${ownerId}`);
             io.to(`user:${ownerId}`).emit('clipboard:viewers', { clipboardId: roomId, active, totalViews });
           }
         } catch (err) {
-          console.error('Error fetching clipboard owner on disconnect', err);
+          console.error('Error fetching clipboard owner on disconnecting', err);
         }
       }
     } catch (err) {
-      console.error('disconnect handler error', err);
+      console.error('disconnecting handler error', err);
     }
   });
 });
