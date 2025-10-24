@@ -257,7 +257,7 @@ export default function DashboardPage() {
     // Charger l'historique selon le statut de l'utilisateur
     if (!isGuest && user) {
       axios
-        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${currentUser?.id}&page=${currentPage}&limit=${itemsPerPage}`, {
+        .get(`${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${user?.id}&page=${currentPage}&limit=${itemsPerPage}`, {
           headers: { Authorization: `Bearer ${user?.access_token}` },
         })
         .then((response) => {
@@ -742,7 +742,7 @@ export default function DashboardPage() {
     }
 
     // MISE À JOUR : _id en query parameter ET dans le body
-    const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${clipboard.id}`
+    const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${clipboard.id}`
     const config = user ? {
       headers: { Authorization: `Bearer ${user?.access_token}` },
     } : {}
@@ -1168,10 +1168,10 @@ export default function DashboardPage() {
 
     setShowHistory(false)
 
-    toast({
-      title: "Clipboard chargé",
-      description: "Le clipboard a été chargé avec succès",
-    })
+    // toast({
+    //   title: "Clipboard chargé",
+    //   description: "Le clipboard a été chargé avec succès",
+    // })
   }
 
   const handleDeleteClipboard = async (clipboardId) => {

@@ -929,6 +929,17 @@ export default function ClipboardViewPage() {
                   <span className="text-[10px] text-green-600 font-medium">Temps réel</span>
                 </div>
               )}
+              {!user && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/login")}
+                  className="gap-2"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span className="hidden sm:inline">Connexion</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>
