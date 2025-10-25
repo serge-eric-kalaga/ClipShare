@@ -245,9 +245,33 @@ module.exports = {
 
                 // Vérifier si on tente de modifier les paramètres de sécurité
                 const securityFields = ['password', 'readOnly', 'expireAt'];
-                const isModifyingSecurity = securityFields.some(field =>
-                    req.body.hasOwnProperty(field) && req.body[field] !== existingEntry[field]
-                );
+                const isModifyingSecurity = securityFields.some(field => {
+                    if (!req.body.hasOwnProperty(field)) return false;
+
+                    const bodyValue = req.body[field];
+                    const existingValue = existingEntry[field];
+
+                    // Normaliser les valeurs null/undefined/empty string
+                    const normalizedBody = bodyValue === '' || bodyValue === undefined ? null : bodyValue;
+                    const normalizedExisting = existingValue === '' || existingValue === undefined ? null : existingValue;
+
+                    // Pour les dates, comparer les valeurs en millisecondes
+                    if (field === 'expireAt') {
+                        if (normalizedBody === null && normalizedExisting === null) return false;
+                        if (normalizedBody === null || normalizedExisting === null) return true;
+                        return new Date(normalizedBody).getTime() !== new Date(normalizedExisting).getTime();
+                    }
+
+                    // Pour les booléens, normaliser false/null
+                    if (field === 'readOnly') {
+                        const boolBody = normalizedBody === null ? false : !!normalizedBody;
+                        const boolExisting = normalizedExisting === null ? false : !!normalizedExisting;
+                        return boolBody !== boolExisting;
+                    }
+
+                    // Pour les strings (password)
+                    return normalizedBody !== normalizedExisting;
+                });
 
                 // Si on modifie la sécurité, seul le propriétaire peut le faire
                 if (isModifyingSecurity) {

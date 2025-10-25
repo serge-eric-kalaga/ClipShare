@@ -75,7 +75,6 @@ export default function DashboardPage() {
   const [clipboardHistory, setClipboardHistory] = useState([])
 
   // DEBUG: Log renders and clipboardHistory
-  console.log('[RENDER] DashboardPage clipboardHistory length:', clipboardHistory.length, 'items:', clipboardHistory.map(c => ({ id: c.id.substring(0, 8), title: c.title?.substring(0, 20) })))
   const [searchQuery, setSearchQuery] = useState("")
   const [filterFavorites, setFilterFavorites] = useState(false)
   const [contentType, setContentType] = useState("text")
@@ -734,11 +733,16 @@ export default function DashboardPage() {
     const payload = {
       title: clipboard.title || "Sans titre",
       content: clipboard.text || "",
-      files: clipboard.files || [],
-      password: clipboard.password || null,
-      expireAt: clipboard.expiresAt || null,
-      readOnly: clipboard.readOnly || false,
       _id: clipboard.id,
+    }
+
+    // Si l'utilisateur est connecté ou si c'est son clipboard (sans propriétaire),
+    // on envoie tous les champs de sécurité
+    if (user || !clipboard.owner) {
+      payload.files = clipboard.files || []
+      payload.password = clipboard.password || null
+      payload.expireAt = clipboard.expiresAt || null
+      payload.readOnly = clipboard.readOnly || false
     }
 
     // MISE À JOUR : _id en query parameter ET dans le body
