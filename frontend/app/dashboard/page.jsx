@@ -733,13 +733,13 @@ export default function DashboardPage() {
     const payload = {
       title: clipboard.title || "Sans titre",
       content: clipboard.text || "",
+      files: clipboard.files || [], // Les fichiers font partie du contenu, pas de la sécurité
       _id: clipboard.id,
     }
 
     // Si l'utilisateur est connecté ou si c'est son clipboard (sans propriétaire),
-    // on envoie tous les champs de sécurité
+    // on envoie aussi les champs de sécurité
     if (user || !clipboard.owner) {
-      payload.files = clipboard.files || []
       payload.password = clipboard.password || null
       payload.expireAt = clipboard.expiresAt || null
       payload.readOnly = clipboard.readOnly || false

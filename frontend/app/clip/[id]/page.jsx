@@ -89,27 +89,22 @@ export default function ClipboardViewPage() {
         if (savedClipboard) {
           const clipboard = JSON.parse(savedClipboard)
 
+          // Toujours envoyer le titre, le contenu et les fichiers (ce n'est pas de la sécurité)
+          payload = {
+            title: clipboard.title || "Sans titre",
+            content: newText,
+            files: clipboard.files || [],
+            _id: params.id,
+          }
+
           // Si l'utilisateur est connecté et est le propriétaire, ou si c'est son clipboard,
-          // on envoie tous les champs. Sinon, on envoie uniquement le contenu.
+          // on envoie aussi les champs de sécurité
           const isOwner = user && clipboard.owner && clipboard.owner === user.id
 
-          if (isOwner || user) {
-            payload = {
-              title: clipboard.title || "Sans titre",
-              content: newText,
-              files: clipboard.files || [],
-              password: clipboard.password || null,
-              expireAt: clipboard.expiresAt || null,
-              readOnly: clipboard.readOnly || false,
-              _id: params.id,
-            }
-          } else {
-            // Utilisateur déconnecté : n'envoyer que le contenu et le titre
-            payload = {
-              title: clipboard.title || "Sans titre",
-              content: newText,
-              _id: params.id,
-            }
+          if (isOwner || user || !clipboard.owner) {
+            payload.password = clipboard.password || null
+            payload.expireAt = clipboard.expiresAt || null
+            payload.readOnly = clipboard.readOnly || false
           }
         }
 
