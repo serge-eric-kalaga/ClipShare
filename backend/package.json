@@ -5,6 +5,7 @@
   "main": "Index.js",
   "scripts": {
     "dev": "nodemon Index.js",
+    "start": "node Index.js",
     "test": "npx jest --runInBand --silent"
   },
   "author": "",
