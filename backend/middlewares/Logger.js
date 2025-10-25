@@ -4,7 +4,7 @@ const logger = require("../utils/Logger");
 
 let httpLogger;
 
-if (process.env.NODE_ENV === "production") {
+if (process.env.APP_ENV === "production") {
   // Production : middleware simple sans dépendances
   httpLogger = (req, res, next) => {
     const start = Date.now();

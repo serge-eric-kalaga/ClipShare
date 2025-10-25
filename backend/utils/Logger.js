@@ -3,7 +3,7 @@
 
 let log;
 
-if (process.env.NODE_ENV === "production") {
+if (process.env.APP_ENV === "production") {
   // Production : wrapper autour de console pour garder la même API
   log = {
     info: (...args) => console.log('[INFO]', ...args),
