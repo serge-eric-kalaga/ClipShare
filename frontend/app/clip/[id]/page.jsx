@@ -99,7 +99,7 @@ export default function ClipboardViewPage() {
         }
 
         // MISE À JOUR : _id en query parameter ET dans le body (comme dans le dashboard)
-        const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?user_id=${params.id}`
+        const updateUrl = `${process.env.NEXT_PUBLIC_API_URL}/clipboards?_id=${params.id}`
         const config = {
           headers: {
             "Content-Type": "application/json",

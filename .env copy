@@ -1,0 +1,48 @@
+### App
+APP_NAME=ExpressJSBackendTemplate
+COMPANY_NAME=Your Company
+PORT=5000
+JWTKey=1234567890
+UserPasswordSaltRound=5
+DATABASE_URL=mongodb+srv://kalagaserge4_db_user:dxoAxHKOTDrm6aSh@clipshare.a2rr1if.mongodb.net/clipshare?appName=clipshare&authSource=admin
+REDIS_URL=redis://:admin123@clipshare_redis:6379/0
+BASE_URL=http://10.10.0.108:5000
+FRONTEND_URL=http://10.10.0.108:3000
+CORS_ORIGIN=http://10.10.0.108:3000
+LOG_LEVEL=debug
+DATABASE_HOST=clipshare_mongodb
+DATABASE_USER=admin
+# Default user (for initial setup)
+INIT_USERNAME=admin
+INIT_PASSWORD=admin
+# Admin (Put here the emails of the administrators separated by commas)
+ADMIN_EMAIL=kalagaserge4@gmail.com
+HOST=10.10.0.108
+
+
+### Mongo DB
+MONGO_INITDB_ROOT_USERNAME=admin
+MONGO_INITDB_ROOT_PASSWORD=admin123
+MONGO_INITDB_DATABASE=clipshare
+ME_CONFIG_MONGODB_SERVER=clipshare_mongodb
+ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+ME_CONFIG_MONGODB_ADMINPASSWORD=admin123
+ME_CONFIG_BASICAUTH_USERNAME=admin
+ME_CONFIG_BASICAUTH_PASSWORD=admin123
+ME_CONFIG_MONGODB_PORT=27017
+ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+ME_CONFIG_MONGODB_URL=mongodb://admin:admin123@clipshare_mongodb:27017/
+ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+
+
+### Redis
+REDIS_HOST=clipshare_redis
+REDIS_PORT=6379
+REDIS_PASSWORD=admin123
+REDIS_DB=0
+
+
+# Frontend
+NEXT_PUBLIC_FRONTEND_URL=http://10.10.0.108:3000
+NEXT_PUBLIC_API_URL=http://10.10.0.108:5555
+NEXT_PUBLIC_ENCRYPTION_KEY=81p0B7yLASiT30l4ruRfu
