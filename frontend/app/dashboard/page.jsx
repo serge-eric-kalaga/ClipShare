@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import {
-  Clipboard,
+  // Clipboard,
   LogOut,
   Trash2,
   Plus,
@@ -1183,7 +1183,22 @@ export default function DashboardPage() {
           headers: { Authorization: `Bearer ${user.access_token}` },
         } : {}
 
-        await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/clipboards/${clipboardId}`, config)
+        await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/clipboards/${clipboardId}`, config).catch((err) => {
+          toast({
+            title: "Erreur",
+            description: err?.response?.data?.message || "Impossible de supprimer le clipboard",
+            variant: "destructive",
+          })
+          return;
+        })
+
+        // Le supprimer aussi dans l'historique local si présent
+        const history = localStorage.getItem("clipboard_history")
+        if (history) {
+          let historyArray = JSON.parse(history)
+          historyArray = historyArray.filter((item) => item.id !== clipboardId)
+          localStorage.setItem("clipboard_history", JSON.stringify(historyArray))
+        }
 
         // Mettre à jour l'interface
         setClipboardHistory((prev) => prev.filter((item) => item.id !== clipboardId))
@@ -1298,6 +1313,7 @@ export default function DashboardPage() {
     setIsGuest(true)
     setShowAuthNotification(true)
     localStorage.removeItem("auth_notification_dismissed")
+    localStorage.removeItem("current_clipboard")
 
     // Recharger l'historique depuis localStorage (données locales)
     const history = localStorage.getItem("clipboard_history")
@@ -1602,8 +1618,8 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 py-3 md:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="h-8 w-8 md:h-10 md:w-10 rounded-xl bg-primary flex items-center justify-center">
-                <Clipboard className="h-4 w-4 md:h-5 md:w-5 text-primary-foreground" />
+              <div className="rounded-xl flex items-center justify-center">
+                <img src="logo.png" alt="ClipShare" width={70} height={70} />
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold">ClipShare</h1>
@@ -1618,7 +1634,7 @@ export default function DashboardPage() {
               <ThemeToggle />
               <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)}>
                 <History className="h-4 w-4 mr-2" />
-                Historique
+                Historique ({displayTotal})
               </Button>
               {isGuest ? (
                 <Button variant="default" size="sm" onClick={handleGoToLogin}>
@@ -1657,7 +1673,7 @@ export default function DashboardPage() {
                       }}
                     >
                       <History className="h-4 w-4 mr-2" />
-                      Historique
+                      Historique ({displayTotal})
                     </Button>
                     {isGuest ? (
                       <Button
@@ -1720,7 +1736,9 @@ export default function DashboardPage() {
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <CardTitle className="text-lg md:text-xl">Historique des Clipboards</CardTitle>
+                    <CardTitle className="text-lg md:text-xl">
+                      Historique des Clipboards ({displayTotal})
+                    </CardTitle>
                     <CardDescription className="text-sm">Gérez vos clipboards précédents</CardDescription>
                   </div>
                   <Button
@@ -1992,7 +2010,9 @@ export default function DashboardPage() {
                                     mode="single"
                                     selected={expirationDate}
                                     onSelect={setExpirationDate}
-                                    disabled={(date) => date < new Date()}
+                                    // disabled={
+                                    //   (date) => date < new Date()
+                                    // }
                                     initialFocus
                                   />
                                   {expirationDate && (

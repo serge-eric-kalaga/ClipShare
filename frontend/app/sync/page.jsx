@@ -151,8 +151,8 @@ export default function SyncPage() {
             <div className="w-full max-w-md space-y-8">
                 <div className="text-center space-y-2">
                     <div className="flex justify-center mb-4">
-                        <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center">
-                            <Clipboard className="h-8 w-8 text-primary-foreground" />
+                        <div className="h-16 w-16 rounded-2xl flex items-center justify-center">
+                            <img src="logo.png" alt="ClipShare" width={70} height={70} />
                         </div>
                     </div>
                     <h1 className="text-4xl font-bold tracking-tight text-balance">Synchronisation</h1>

@@ -117,8 +117,11 @@ export default function LandingPage() {
             <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
+                        {/* <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
                             <Clipboard className="w-6 h-6 text-white" />
+                        </div> */}
+                        <div className="rounded-xl flex items-center justify-center">
+                            <img src="logo.png" alt="ClipShare" width={70} height={70} />
                         </div>
                         <span className="text-xl font-bold">ClipShare</span>
                     </div>
@@ -428,7 +431,7 @@ export default function LandingPage() {
                     </div>
 
                     <div className="pt-8 border-t text-center text-sm text-muted-foreground">
-                        <p>© 2025 ClipShare. Tous droits réservés.</p>
+                        <p>© 2025 Serge Eric KALAGA - ClipShare. Tous droits réservés.</p>
                     </div>
                 </div>
             </footer>

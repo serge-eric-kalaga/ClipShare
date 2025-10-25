@@ -25,6 +25,6 @@ clipboardRouter.get("/", LoginRequired, getClipboardEntries);
 // Route pour basculer le statut favori
 clipboardRouter.patch("/:id/favorite", OptionalAuth, toggleFavorite);
 
-clipboardRouter.delete("/:id", LoginRequired, deleteClipboardEntry);
+clipboardRouter.delete("/:id", OptionalAuth, deleteClipboardEntry);
 
 module.exports = clipboardRouter;

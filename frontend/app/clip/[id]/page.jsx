@@ -698,8 +698,8 @@ export default function ClipboardViewPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mx-auto animate-pulse">
-            <Clipboard className="h-8 w-8 text-primary-foreground" />
+          <div className="rounded-xl flex items-center justify-center mx-auto animate-pulse">
+            <img src="../logo.png" alt="ClipShare" width={200} height={200} />
           </div>
           <p className="text-muted-foreground">Chargement du clipboard...</p>
         </div>
