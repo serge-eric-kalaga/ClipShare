@@ -41,9 +41,15 @@ module.exports = {
                 }
 
                 // Vérifier les permissions
-                if (clipboard.owner && (!res.user || clipboard.owner.toString() !== res.user.id.toString())) {
-                    return res.status(403).Response({ message: "Vous n'êtes pas autorisé à modifier ce clipboard !" });
+                // Si le clipboard est en lecture seule, seul le propriétaire peut ajouter des fichiers
+                if (clipboard.readOnly === true) {
+                    if (clipboard.owner && (!res.user || clipboard.owner.toString() !== res.user.id.toString())) {
+                        return res.status(403).Response({ message: "Ce clipboard est en lecture seule !" });
+                    }
                 }
+
+                // Si le clipboard n'est pas en lecture seule, tout le monde peut ajouter des fichiers
+                // (comportement collaboratif)
 
                 // ajouter le fichier au presse-papiers
                 clipboard.files.push(fileUrl);
