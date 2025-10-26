@@ -106,6 +106,8 @@ export default function Dashboard() {
   const recentSaveRef = useRef(false)
   // Track if a clipboard creation is in progress
   const isCreatingClipboardRef = useRef(false)
+  // Track if we are loading initial data to prevent auto-save
+  const isLoadingInitialData = useRef(true)
 
   // Socket.io client ref
   const socketRef = useRef(null)
@@ -248,6 +250,11 @@ export default function Dashboard() {
     }
     // NE PAS créer de clipboard automatiquement
     // Il sera créé lors de la première saisie de texte
+
+    // Marquer la fin du chargement initial après un court délai
+    setTimeout(() => {
+      isLoadingInitialData.current = false
+    }, 1000)
 
     // Cleanup timer on unmount
     return () => {
@@ -495,6 +502,12 @@ export default function Dashboard() {
 
   // Fonction pour sauvegarder automatiquement après 2 secondes de pause
   const debouncedSave = useCallback(() => {
+    // Ne pas sauvegarder pendant le chargement initial
+    if (isLoadingInitialData.current) {
+      console.log('Skipping save during initial data load')
+      return
+    }
+
     // Indiquer que des modifications sont en attente de synchronisation
     setIsSynch(false)
 
@@ -766,9 +779,26 @@ export default function Dashboard() {
     axios
       .post(updateUrl, payload, config)
       .then((response) => {
+        const updatedClipboard = response.data?.data || response.data
+
         if (user) {
-          // Si connecté, recharger depuis le serveur
+          // Si connecté, recharger depuis le serveur pour avoir les dernières données
           loadClipboardHistory()
+
+          // Mettre à jour aussi le clipboard actuel si c'est celui-ci
+          if (updatedClipboard && updatedClipboard._id === clipboard.id) {
+            const updated = {
+              ...clipboard,
+              text: updatedClipboard.content || clipboard.text,
+              title: updatedClipboard.title || clipboard.title,
+              files: updatedClipboard.files || clipboard.files,
+              updatedAt: updatedClipboard.updatedAt,
+              password: updatedClipboard.password,
+              readOnly: updatedClipboard.readOnly,
+              expiration: updatedClipboard.expireAt,
+            }
+            localStorage.setItem("current_clipboard", JSON.stringify(updated))
+          }
         } else {
           // Si invité, mettre à jour localStorage
           const history = localStorage.getItem("clipboard_history")
@@ -787,7 +817,6 @@ export default function Dashboard() {
       })
       .catch((err) => {
         console.error("Erreur mise à jour clipboard:", err)
-        localStorage.removeItem("current_clipboard")
         toast({
           title: "Erreur",
           description: err?.response?.data?.message || "Une erreur est survenue lors de la sauvegarde",
