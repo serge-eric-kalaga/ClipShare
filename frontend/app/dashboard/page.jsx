@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -60,9 +60,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { decryptData } from "@/hooks/functions"
 import axios from "axios"
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const router = useRouter()
   const { toast } = useToast()
+  const [clipboards, setClipboards] = useState([])
+  const [selectedClipboard, setSelectedClipboard] = useState(null)
+  const [clipboard, setClipboard] = useState(null)
   const [user, setUser] = useState(null)
   const [isGuest, setIsGuest] = useState(true)
   const [showAuthNotification, setShowAuthNotification] = useState(true)
@@ -112,6 +115,8 @@ export default function DashboardPage() {
   const [socketConnected, setSocketConnected] = useState(false)
   // Track if we just received a socket update to avoid reloading from API
   const recentSocketUpdateRef = useRef(false)
+  // Track if user is currently typing to avoid overwriting their changes
+  const isTypingRef = useRef(false)
 
   // Date picker state for expiration
   const [expirationDate, setExpirationDate] = useState(null)
@@ -395,7 +400,14 @@ export default function DashboardPage() {
         // If currently joined to that clipboard, update the editor state
         if (joinedClipboardRef.current && joinedClipboardRef.current === mapped.id) {
           console.log('[clipboard:update] Updating editor for joined clipboard')
-          setClipboardText(mapped.text)
+
+          // Ne pas écraser le texte si l'utilisateur est en train de taper
+          if (!isTypingRef.current) {
+            setClipboardText(mapped.text)
+          } else {
+            console.log('[clipboard:update] User is typing, skipping text update')
+          }
+
           setClipboardTitle(mapped.title)
           setUploadedFiles(mapped.files || [])
           setClipboardPassword(mapped.password || "")
@@ -967,6 +979,18 @@ export default function DashboardPage() {
   const handleTextChange = (e) => {
     const newText = e.target.value
     setClipboardText(newText)
+
+    // Marquer que l'utilisateur est en train de taper
+    isTypingRef.current = true
+
+    // Réinitialiser après 3 secondes d'inactivité
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+    }
+
+    const typingTimeout = setTimeout(() => {
+      isTypingRef.current = false
+    }, 3000)
 
     const savedClipboard = localStorage.getItem("current_clipboard")
 
@@ -1611,11 +1635,6 @@ export default function DashboardPage() {
     return null
   }
 
-  // Removed the check for !user here as we now handle guest users
-  // if (!user) {
-  //   return null
-  // }
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card sticky top-0 z-50">
@@ -2149,6 +2168,14 @@ export default function DashboardPage() {
                         <RichTextEditor
                           content={clipboardText}
                           onChange={(html) => {
+                            // Marquer que l'utilisateur est en train de taper
+                            isTypingRef.current = true
+
+                            // Réinitialiser après 3 secondes d'inactivité
+                            setTimeout(() => {
+                              isTypingRef.current = false
+                            }, 3000)
+
                             setClipboardText(html)
                             const savedClipboard = localStorage.getItem("current_clipboard")
 
