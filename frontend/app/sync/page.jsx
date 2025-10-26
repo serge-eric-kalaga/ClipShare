@@ -125,6 +125,9 @@ export default function SyncPage() {
                 description: `${clipboardIds.length} clipboard(s) synchronisé(s) avec succès`,
             })
 
+            // Vider le clipboard local après synchronisation
+            localStorage.setItem("clipboard_history", JSON.stringify([]))
+
             // Rediriger vers le dashboard
             router.push("/dashboard")
         } catch (error) {
