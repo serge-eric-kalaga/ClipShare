@@ -32,8 +32,9 @@ services:
       - "27017:27017"
     volumes:
       - ./data/mongo_data:/data/db
+    command: [ "mongod", "--quiet" ]
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -96,7 +97,6 @@ services:
 
 networks:
   clipshare_network:
-
 
 volumes:
   frontend_node_modules:

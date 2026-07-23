@@ -438,7 +438,7 @@ module.exports = {
             }
 
             // Basculer le statut favori
-            entry.isFavorite = !entry.isFavorite;
+            entry.isFavorite = entry.isFavorite == true ? false : true;
             await entry.save();
 
             // Emit socket update to notify viewers
